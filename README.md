@@ -51,21 +51,21 @@ All messages are JSON-encoded with an `action` field for routing.
 
 ## Features
 
-### P0: Windows Native Support
+### Windows Native Support
 
 - Win32 window with WebView2 embedded browser
 - Dark theme matching Windows 11 system appearance
 - Minimum window size enforcement (800x600)
 - Centered window on launch
 
-### P0: Environment Variable Management
+### Environment Variable Management
 
 - Read/write environment variables via Windows Registry API
 - User-level and system-level variable support
 - Automatic PATH management for installed packages
 - `WM_SETTINGCHANGE` broadcast for immediate effect
 
-### P1: Fault Tolerance & Recovery
+### Fault Tolerance & Recovery
 
 - Automatic snapshot before any installation
 - Manual snapshot creation with descriptions
@@ -73,7 +73,7 @@ All messages are JSON-encoded with an `action` field for routing.
 - Snapshot storage in `%LOCALAPPDATA%/LazyEnv/snapshots/` as JSON files
 - Snapshot listing, restore, and deletion via UI
 
-### P2: Cross-platform Consistency Abstraction
+### Cross-platform Consistency Abstraction
 
 - Namespace-based module separation (`lazyenv::`)
 - Platform-agnostic interfaces (`Installer`, `RollbackManager`)
