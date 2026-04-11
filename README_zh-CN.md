@@ -52,21 +52,21 @@ LazyEnv/
 
 ## 功能特性
 
-### P0: Windows 原生支持
+### Windows 原生支持
 
 - 内嵌 WebView2 浏览器的 Win32 窗口
 - 匹配 Windows 11 系统外观的暗色主题
 - 无边框窗口，支持自定义标题栏、拖拽、最大化/最小化
 - DPI 感知与字体抗锯齿优化
 
-### P0: 环境变量管理
+### 环境变量管理
 
 - 通过 Windows 注册表 API 读写环境变量
 - 支持用户级和系统级变量
 - 为已安装的包自动管理 PATH
 - 广播 `WM_SETTINGCHANGE` 消息使更改立即生效
 
-### P1: 容错与恢复
+### 容错与恢复
 
 - 任何安装操作前自动创建快照
 - 支持手动创建带描述的快照
@@ -74,7 +74,7 @@ LazyEnv/
 - 快照以 JSON 格式存储在 `%LOCALAPPDATA%/LazyEnv/snapshots/` 中
 - 通过 UI 查看、恢复和删除快照
 
-### P2: 跨平台一致性抽象
+### 跨平台一致性抽象
 
 - 基于命名空间的模块隔离 (`lazyenv::`)
 - 平台无关的接口设计 (`Installer`, `RollbackManager`)
