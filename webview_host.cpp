@@ -38,6 +38,13 @@ std::wstring utf8ToWide(const std::string& s) {
     if (s.empty()) return {};
     int len = MultiByteToWideChar(CP_UTF8, 0, s.data(),
                                   static_cast<int>(s.size()), nullptr, 0);
+    if (len <= 0) {
+        // Conversion failed (invalid UTF-8); fall back to ASCII-safe copy
+        std::wstring ws;
+        ws.reserve(s.size());
+        for (unsigned char c : s) ws.push_back(static_cast<wchar_t>(c));
+        return ws;
+    }
     std::wstring ws(len, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, s.data(),
                         static_cast<int>(s.size()), ws.data(), len);
@@ -49,6 +56,13 @@ std::string wideToUtf8(const std::wstring& ws) {
     int len = WideCharToMultiByte(CP_UTF8, 0, ws.data(),
                                   static_cast<int>(ws.size()),
                                   nullptr, 0, nullptr, nullptr);
+    if (len <= 0) {
+        // Conversion failed; fall back to ASCII-safe copy
+        std::string s;
+        s.reserve(ws.size());
+        for (wchar_t c : ws) s.push_back(static_cast<char>(c & 0x7F));
+        return s;
+    }
     std::string s(len, '\0');
     WideCharToMultiByte(CP_UTF8, 0, ws.data(),
                         static_cast<int>(ws.size()),

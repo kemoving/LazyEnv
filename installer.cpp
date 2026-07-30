@@ -253,7 +253,9 @@ int Installer::runCommand(const std::string& cmdLine,
     // Read all output
     char buf[4096];
     DWORD bytesRead = 0;
-    while (ReadFile(ph.hRead, buf, sizeof(buf) - 1, &bytesRead, nullptr) && bytesRead > 0) {
+    DWORD bufSize = static_cast<DWORD>(sizeof(buf) - 1);
+    while (ReadFile(ph.hRead, buf, bufSize, &bytesRead, nullptr) && bytesRead > 0) {
+        if (bytesRead > bufSize) bytesRead = bufSize;  // defensive: never overflow
         buf[bytesRead] = '\0';
         output += buf;
     }
@@ -293,8 +295,10 @@ int Installer::runCommandStreaming(const std::string& cmdLine,
     std::string lineBuffer;
     char buf[1024];
     DWORD bytesRead = 0;
+    DWORD bufSize = static_cast<DWORD>(sizeof(buf) - 1);
 
-    while (ReadFile(ph.hRead, buf, sizeof(buf) - 1, &bytesRead, nullptr) && bytesRead > 0) {
+    while (ReadFile(ph.hRead, buf, bufSize, &bytesRead, nullptr) && bytesRead > 0) {
+        if (bytesRead > bufSize) bytesRead = bufSize;  // defensive
         buf[bytesRead] = '\0';
         fullOutput += buf;
 

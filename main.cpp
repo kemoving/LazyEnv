@@ -42,6 +42,7 @@
 #include <format>
 #include <vector>
 #include <algorithm>
+#include <memory>
 
 // ---------------------------------------------------------------------------
 // Globals
@@ -282,6 +283,32 @@ std::string probeCommand(const std::string& command, const std::string& category
         jsonEscape(command));
 }
 
+// SEH wrapper: ACCESS_VIOLATION (C0000005) cannot be caught by C++ try-catch.
+// We need __try/__except to prevent the process from crashing when a background
+// thread hits a memory access violation. The actual work with C++ objects is
+// in a separate function because MSVC forbids objects with destructors inside
+// __try blocks.
+static void doDetectEnvironments() {
+    try {
+        std::string envJson = detectInstalledEnvironments();
+        std::string respMsg = "{\"action\":\"environmentsDetected\",\"environments\":" + envJson + "}";
+        g_webview.postMessage(respMsg);
+    } catch (const std::exception& e) {
+        std::string errMsg = "{\"action\":\"environmentsDetected\",\"environments\":[],\"error\":\"" + jsonEscape(e.what()) + "\"}";
+        g_webview.postMessage(errMsg);
+    } catch (...) {
+        g_webview.postMessage("{\"action\":\"environmentsDetected\",\"environments\":[],\"error\":\"Unknown error during environment detection\"}");
+    }
+}
+
+static void detectEnvironmentsWithSEH() {
+    __try {
+        doDetectEnvironments();
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        g_webview.postMessage("{\"action\":\"environmentsDetected\",\"environments\":[],\"error\":\"Fatal system exception (SEH)\"}");
+    }
+}
+
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
@@ -321,18 +348,7 @@ std::string handleWebMessage(const std::string& message) {
 
     // ------ Detect installed environments ------
     if (action == "detectEnvironments") {
-        std::thread([]() {
-            try {
-                std::string envJson = detectInstalledEnvironments();
-                std::string respMsg = "{\"action\":\"environmentsDetected\",\"environments\":" + envJson + "}";
-                g_webview.postMessage(respMsg);
-            } catch (const std::exception& e) {
-                std::string errMsg = "{\"action\":\"environmentsDetected\",\"environments\":[],\"error\":\"" + jsonEscape(e.what()) + "\"}";
-                g_webview.postMessage(errMsg);
-            } catch (...) {
-                g_webview.postMessage("{\"action\":\"environmentsDetected\",\"environments\":[],\"error\":\"Unknown error during environment detection\"}");
-            }
-        }).detach();
+        std::thread(detectEnvironmentsWithSEH).detach();
         return "{\"action\":\"detectStarted\"}";
     }
 
