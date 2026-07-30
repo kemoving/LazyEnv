@@ -997,6 +997,36 @@ std::string handleWebMessage(const std::string& message) {
 }
 
 // ---------------------------------------------------------------------------
+// Vectored Exception Handler — fires BEFORE any SEH __try/__except.
+// This is the absolute first line of defense against ACCESS_VIOLATION.
+//
+// On background threads: suppress the crash to prevent double-fault
+// process death when an exception escapes from inside a __except handler.
+// On the UI thread: let it propagate to our SEH wrappers (WndProc/message loop).
+// ---------------------------------------------------------------------------
+static LONG CALLBACK vectoredExceptionHandler(_In_ EXCEPTION_POINTERS* ep) {
+    DWORD code = ep->ExceptionRecord->ExceptionCode;
+    if (code != EXCEPTION_ACCESS_VIOLATION)
+        return EXCEPTION_CONTINUE_SEARCH;
+
+    char buf[256];
+    snprintf(buf, sizeof(buf),
+             "LazyEnv VeH: ACCESS_VIOLATION at 0x%p, thread=%lu\n",
+             ep->ExceptionRecord->ExceptionAddress,
+             GetCurrentThreadId());
+    OutputDebugStringA(buf);
+
+    // Background thread: suppress to prevent process death from double fault
+    if (g_mainWindow &&
+        GetCurrentThreadId() != GetWindowThreadProcessId(g_mainWindow, nullptr)) {
+        OutputDebugStringA("LazyEnv VeH: suppressing background thread crash\n");
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+
+    return EXCEPTION_CONTINUE_SEARCH;  // UI thread: let SEH handle it
+}
+
+// ---------------------------------------------------------------------------
 // Window procedure (inner) — all real WndProc logic.
 // Does NOT use __try to avoid C2712 conflict with C++ local objects.
 // ---------------------------------------------------------------------------
@@ -1184,6 +1214,11 @@ static void runMessageLoop() {
 // WinMain
 // ---------------------------------------------------------------------------
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
+    // Install vectored exception handler — fires BEFORE any SEH or
+    // unhandled exception filter. Catches ACCESS_VIOLATION at the
+    // earliest possible point to prevent double-fault process death.
+    PVOID vehHandle = AddVectoredExceptionHandler(1, vectoredExceptionHandler);
+
     // Install process-wide unhandled exception filter as the absolute
     // last resort. Any exception that escapes all __try/__except and
     // try/catch blocks will be logged here before WER creates a dump.

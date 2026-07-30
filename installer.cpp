@@ -23,10 +23,12 @@
 #include "rollback.h"   // For environment variable helpers
 
 #include <Windows.h>
+#include <eh.h>         // __try/__except SEH
 
 #include <sstream>
 #include <algorithm>
 #include <format>
+#include <cstdio>
 
 namespace lazyenv {
 
@@ -217,6 +219,7 @@ bool launchProcess(const std::string& cmdLine, HANDLE hWritePipe,
     std::string fullCmd = "cmd /c " + cmdLine;
     int wlen = MultiByteToWideChar(CP_UTF8, 0, fullCmd.c_str(),
                                    static_cast<int>(fullCmd.size()), nullptr, 0);
+    if (wlen <= 0) return false;
     std::wstring wcmd(wlen, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, fullCmd.c_str(),
                         static_cast<int>(fullCmd.size()), wcmd.data(), wlen);
@@ -229,10 +232,63 @@ bool launchProcess(const std::string& cmdLine, HANDLE hWritePipe,
         &si, &pi) != 0;
 }
 
+// ---------------------------------------------------------------------------
+// SEH-safe core: ReadFile loop + WaitForSingleObject.
+// This function contains NO C++ objects with destructors — safe for __try.
+// ---------------------------------------------------------------------------
+struct RawExecResult {
+    char  outputData[65536];  // fixed-size buffer, no heap allocation
+    DWORD outputLen;
+    DWORD exitCode;
+    bool  success;
+};
+
+// Forward-declare the SEH wrapper (no C++ objects, pure C signatures)
+static void sehReadPipeLoop(HANDLE hRead, RawExecResult* result);
+
+// SEH-protected ReadFile loop — pure C, no C++ objects
+static void sehReadPipeLoop(HANDLE hRead, RawExecResult* result) {
+    __try {
+        char buf[4096];
+        DWORD bytesRead = 0;
+        result->outputLen = 0;
+        DWORD bufSize = static_cast<DWORD>(sizeof(buf) - 1);
+        DWORD maxOut = static_cast<DWORD>(sizeof(result->outputData) - 1);
+
+        while (ReadFile(hRead, buf, bufSize, &bytesRead, nullptr) && bytesRead > 0) {
+            if (bytesRead > bufSize) bytesRead = bufSize;
+            // Avoid overflow: clamp to remaining space
+            if (result->outputLen + bytesRead > maxOut)
+                bytesRead = maxOut - result->outputLen;
+            if (bytesRead == 0) break;
+            memcpy(result->outputData + result->outputLen, buf, bytesRead);
+            result->outputLen += bytesRead;
+        }
+        result->outputData[result->outputLen] = '\0';
+        result->success = true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        result->outputData[result->outputLen] = '\0';  // null-terminate partial
+        result->success = false;
+    }
+}
+
+// Read-after-SEH: wait for process exit (no __try needed, stable after ReadFile)
+static DWORD waitForProcessExit(HANDLE hProcess, DWORD timeoutMs) {
+    WaitForSingleObject(hProcess, timeoutMs);
+    DWORD exitCode = 0;
+    GetExitCodeProcess(hProcess, &exitCode);
+    return exitCode;
+}
+
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
 // Blocking command execution with full output capture
+//
+// All Win32 I/O (CreateProcess + ReadFile pipe loop) runs inside __try/__except
+// via sehReadPipeLoop. This prevents ACCESS_VIOLATION inside pipe I/O from
+// escaping and corrupting the call stack, which would cause a double fault
+// in the outer __except handler (sehThreadProc).
 // ---------------------------------------------------------------------------
 int Installer::runCommand(const std::string& cmdLine,
                           std::string& output,
@@ -248,23 +304,27 @@ int Installer::runCommand(const std::string& cmdLine,
         CloseHandle(ph.hWrite);
         return -1;
     }
-    CloseHandle(ph.hWrite);
+    CloseHandle(ph.hWrite);  // child inherits the write end
 
-    // Read all output
-    char buf[4096];
-    DWORD bytesRead = 0;
-    DWORD bufSize = static_cast<DWORD>(sizeof(buf) - 1);
-    while (ReadFile(ph.hRead, buf, bufSize, &bytesRead, nullptr) && bytesRead > 0) {
-        if (bytesRead > bufSize) bytesRead = bufSize;  // defensive: never overflow
-        buf[bytesRead] = '\0';
-        output += buf;
-    }
+    // SEH-safe ReadFile loop — uses fixed-size stack buffer, no heap alloc
+    RawExecResult raw{};
+    sehReadPipeLoop(ph.hRead, &raw);
     CloseHandle(ph.hRead);
 
-    WaitForSingleObject(pi.hProcess, timeoutMs);
+    if (!raw.success) {
+        // SEH caught an ACCESS_VIOLATION during pipe read — save partial output
+        if (raw.outputLen > 0)
+            output.assign(raw.outputData, raw.outputLen);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        return -2;  // special code: SEH exception during I/O
+    }
 
-    DWORD exitCode = 0;
-    GetExitCodeProcess(pi.hProcess, &exitCode);
+    // Copy output from fixed buffer to std::string (safe: no I/O, only memory)
+    if (raw.outputLen > 0)
+        output.assign(raw.outputData, raw.outputLen);
+
+    DWORD exitCode = waitForProcessExit(pi.hProcess, timeoutMs);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
@@ -273,7 +333,35 @@ int Installer::runCommand(const std::string& cmdLine,
 
 // ---------------------------------------------------------------------------
 // Streaming command execution with line-by-line callback
+//
+// Split into two layers:
+// 1. sehReadPipeRaw  — pure-C ReadFile loop in __try/__except
+// 2. runCommandStreaming — post-processes raw bytes into lines (no I/O, safe)
 // ---------------------------------------------------------------------------
+namespace {
+
+// Pure C: read raw bytes from pipe into fixed buffer. __try-safe.
+static bool sehReadPipeRaw(HANDLE hRead, char* outBuf, DWORD bufCapacity, DWORD* outLen) {
+    bool ok = false;
+    __try {
+        *outLen = 0;
+        DWORD bytesRead = 0;
+        while (*outLen + 4096 <= bufCapacity &&
+               ReadFile(hRead, outBuf + *outLen, 4096, &bytesRead, nullptr) &&
+               bytesRead > 0) {
+            *outLen += bytesRead;
+        }
+        outBuf[*outLen] = '\0';
+        ok = true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        outBuf[*outLen] = '\0';
+        ok = false;
+    }
+    return ok;
+}
+
+} // anonymous namespace
+
 int Installer::runCommandStreaming(const std::string& cmdLine,
                                   std::string& fullOutput,
                                   LineCallback onLine,
@@ -291,45 +379,47 @@ int Installer::runCommandStreaming(const std::string& cmdLine,
     }
     CloseHandle(ph.hWrite);
 
-    // Read output and split into lines, calling onLine for each
-    std::string lineBuffer;
-    char buf[1024];
-    DWORD bytesRead = 0;
-    DWORD bufSize = static_cast<DWORD>(sizeof(buf) - 1);
+    // SEH-safe read into a fixed-size stack buffer
+    char rawBuf[65536];
+    DWORD rawLen = 0;
+    bool readOk = sehReadPipeRaw(ph.hRead, rawBuf, sizeof(rawBuf) - 1, &rawLen);
+    CloseHandle(ph.hRead);
 
-    while (ReadFile(ph.hRead, buf, bufSize, &bytesRead, nullptr) && bytesRead > 0) {
-        if (bytesRead > bufSize) bytesRead = bufSize;  // defensive
-        buf[bytesRead] = '\0';
-        fullOutput += buf;
+    if (!readOk) {
+        // SEH caught an exception during I/O — save what we got
+        if (rawLen > 0) {
+            rawBuf[rawLen] = '\0';
+            fullOutput.assign(rawBuf, rawLen);
+        }
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        return -2;
+    }
 
-        // Split into lines
-        for (DWORD i = 0; i < bytesRead; ++i) {
-            if (buf[i] == '\n') {
-                // Trim trailing \r
+    fullOutput.assign(rawBuf, rawLen);
+
+    // Split raw output into lines and invoke callback (C++ code, safe)
+    if (onLine) {
+        std::string lineBuffer;
+        for (DWORD i = 0; i < rawLen; ++i) {
+            if (rawBuf[i] == '\n') {
                 if (!lineBuffer.empty() && lineBuffer.back() == '\r')
                     lineBuffer.pop_back();
-                if (onLine && !lineBuffer.empty())
+                if (!lineBuffer.empty())
                     onLine(lineBuffer);
                 lineBuffer.clear();
             } else {
-                lineBuffer += buf[i];
+                lineBuffer += rawBuf[i];
             }
+        }
+        if (!lineBuffer.empty()) {
+            if (lineBuffer.back() == '\r') lineBuffer.pop_back();
+            if (!lineBuffer.empty())
+                onLine(lineBuffer);
         }
     }
 
-    // Flush remaining partial line
-    if (!lineBuffer.empty()) {
-        if (lineBuffer.back() == '\r') lineBuffer.pop_back();
-        if (onLine && !lineBuffer.empty())
-            onLine(lineBuffer);
-    }
-
-    CloseHandle(ph.hRead);
-
-    WaitForSingleObject(pi.hProcess, timeoutMs);
-
-    DWORD exitCode = 0;
-    GetExitCodeProcess(pi.hProcess, &exitCode);
+    DWORD exitCode = waitForProcessExit(pi.hProcess, timeoutMs);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
