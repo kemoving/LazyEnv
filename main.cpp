@@ -322,9 +322,16 @@ std::string handleWebMessage(const std::string& message) {
     // ------ Detect installed environments ------
     if (action == "detectEnvironments") {
         std::thread([]() {
-            std::string envJson = detectInstalledEnvironments();
-            std::string respMsg = "{\"action\":\"environmentsDetected\",\"environments\":" + envJson + "}";
-            g_webview.postMessage(respMsg);
+            try {
+                std::string envJson = detectInstalledEnvironments();
+                std::string respMsg = "{\"action\":\"environmentsDetected\",\"environments\":" + envJson + "}";
+                g_webview.postMessage(respMsg);
+            } catch (const std::exception& e) {
+                std::string errMsg = "{\"action\":\"environmentsDetected\",\"environments\":[],\"error\":\"" + jsonEscape(e.what()) + "\"}";
+                g_webview.postMessage(errMsg);
+            } catch (...) {
+                g_webview.postMessage("{\"action\":\"environmentsDetected\",\"environments\":[],\"error\":\"Unknown error during environment detection\"}");
+            }
         }).detach();
         return "{\"action\":\"detectStarted\"}";
     }
@@ -336,8 +343,12 @@ std::string handleWebMessage(const std::string& message) {
         if (cat.empty()) cat = "other";
 
         std::thread([cmd, cat]() {
-            std::string result = probeCommand(cmd, cat);
-            g_webview.postMessage(result);
+            try {
+                std::string result = probeCommand(cmd, cat);
+                g_webview.postMessage(result);
+            } catch (...) {
+                g_webview.postMessage("{\"action\":\"probeResult\",\"found\":false,\"command\":\"" + jsonEscape(cmd) + "\",\"error\":true}");
+            }
         }).detach();
         return "{\"action\":\"probeStarted\"}";
     }
@@ -346,13 +357,20 @@ std::string handleWebMessage(const std::string& message) {
     if (action == "uninstallPackage") {
         std::string pkgName = extractJsonValue(message, "command");
         std::thread([pkgName]() {
-            std::string output;
-            std::string cmd = "winget uninstall --name \"" + pkgName + "\" --silent --accept-source-agreements 2>&1";
-            int rc = lazyenv::Installer::runCommand(cmd, output, 300000);
-            std::string respMsg = std::format(
-                "{{\"action\":\"uninstallResult\",\"command\":\"{}\",\"success\":{},\"output\":\"{}\"}}",
-                jsonEscape(pkgName), rc == 0 ? "true" : "false", jsonEscape(output.substr(0, 500)));
-            g_webview.postMessage(respMsg);
+            try {
+                std::string output;
+                std::string cmd = "winget uninstall --name \"" + pkgName + "\" --silent --accept-source-agreements 2>&1";
+                int rc = lazyenv::Installer::runCommand(cmd, output, 300000);
+                std::string respMsg = std::format(
+                    "{{\"action\":\"uninstallResult\",\"command\":\"{}\",\"success\":{},\"output\":\"{}\"}}",
+                    jsonEscape(pkgName), rc == 0 ? "true" : "false", jsonEscape(output.substr(0, 500)));
+                g_webview.postMessage(respMsg);
+            } catch (...) {
+                std::string respMsg = std::format(
+                    "{{\"action\":\"uninstallResult\",\"command\":\"{}\",\"success\":false,\"error\":true}}",
+                    jsonEscape(pkgName));
+                g_webview.postMessage(respMsg);
+            }
         }).detach();
         return "{\"action\":\"uninstallStarted\"}";
     }
@@ -388,6 +406,7 @@ std::string handleWebMessage(const std::string& message) {
         std::string snapId = g_rollback.createSnapshot("Pre-install snapshot");
 
         std::thread([ids, catalog, snapId]() {
+            try {
             int total = static_cast<int>(ids.size());
             int current = 0;
 
@@ -468,6 +487,17 @@ std::string handleWebMessage(const std::string& message) {
                     jsonEscape(snapId));
                 g_webview.postMessage(m);
             }
+            } catch (const std::exception& e) {
+                std::string m = std::format(
+                    "{{\"action\":\"installComplete\",\"snapshotId\":\"{}\",\"error\":\"{}\"}}",
+                    jsonEscape(snapId), jsonEscape(e.what()));
+                g_webview.postMessage(m);
+            } catch (...) {
+                std::string m = std::format(
+                    "{{\"action\":\"installComplete\",\"snapshotId\":\"{}\",\"error\":\"Unknown error during installation\"}}",
+                    jsonEscape(snapId));
+                g_webview.postMessage(m);
+            }
         }).detach();
 
         return std::format("{{\"action\":\"installStarted\",\"snapshotId\":\"{}\"}}", jsonEscape(snapId));
@@ -479,6 +509,7 @@ std::string handleWebMessage(const std::string& message) {
         auto catalog = lazyenv::getDefaultCatalog();
 
         std::thread([id, catalog]() {
+            try {
             lazyenv::PackageInfo pkg;
             for (auto& p : catalog) {
                 if (p.id == id) { pkg = p; break; }
@@ -535,6 +566,19 @@ std::string handleWebMessage(const std::string& message) {
                     jsonEscape(cmdLine),
                     jsonEscape(fullOutput.substr(0, 2000)),
                     exitCode);
+                g_webview.postMessage(m);
+            }
+            } catch (const std::exception& e) {
+                std::string m = std::format(
+                    "{{\"action\":\"installProgress\",\"packageId\":\"{}\","
+                    "\"status\":\"failed\",\"message\":\"Retry error: {}\"}}",
+                    jsonEscape(id), jsonEscape(e.what()));
+                g_webview.postMessage(m);
+            } catch (...) {
+                std::string m = std::format(
+                    "{{\"action\":\"installProgress\",\"packageId\":\"{}\","
+                    "\"status\":\"failed\",\"message\":\"Unknown error during retry\"}}",
+                    jsonEscape(id));
                 g_webview.postMessage(m);
             }
         }).detach();

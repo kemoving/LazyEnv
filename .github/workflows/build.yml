@@ -1,0 +1,43 @@
+name: Build LazyEnv (Windows exe)
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-win-x64:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure CMake (Ninja)
+        run: >
+          cmake -B build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LazyEnv-win-x64
+          path: |
+            build/LazyEnv.exe
+            build/resources/
+          if-no-files-found: error

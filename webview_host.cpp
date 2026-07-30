@@ -166,11 +166,27 @@ void WebViewHost::setupMessageBridge() {
                     CoTaskMemFree(rawMsg);
 
                     if (messageHandler_) {
-                        std::string response = messageHandler_(msg);
-                        if (!response.empty()) {
-                            // This callback runs on the UI thread, so direct
-                            // delivery is safe here.
-                            std::wstring wjson = utf8ToWide(response);
+                        try {
+                            std::string response = messageHandler_(msg);
+                            if (!response.empty()) {
+                                // This callback runs on the UI thread, so direct
+                                // delivery is safe here.
+                                std::wstring wjson = utf8ToWide(response);
+                                webview_->PostWebMessageAsString(wjson.c_str());
+                            }
+                        } catch (const std::exception& e) {
+                            // Prevent any unhandled C++ exception from
+                            // escaping the WebView2 callback boundary,
+                            // which would cause STATUS_FATAL_USER_CALLBACK_EXCEPTION
+                            // (0xC000041D) and kill the process silently.
+                            std::string errMsg = "{\"action\":\"error\",\"message\":\""
+                                + std::string(e.what()) + "\"}";
+                            std::wstring wjson = utf8ToWide(errMsg);
+                            webview_->PostWebMessageAsString(wjson.c_str());
+                        } catch (...) {
+                            std::string errMsg = "{\"action\":\"error\","
+                                "\"message\":\"Unknown internal error\"}";
+                            std::wstring wjson = utf8ToWide(errMsg);
                             webview_->PostWebMessageAsString(wjson.c_str());
                         }
                     }

@@ -215,7 +215,11 @@ bool launchProcess(const std::string& cmdLine, HANDLE hWritePipe,
     si.wShowWindow = SW_HIDE;
 
     std::string fullCmd = "cmd /c " + cmdLine;
-    std::wstring wcmd(fullCmd.begin(), fullCmd.end());
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, fullCmd.c_str(),
+                                   static_cast<int>(fullCmd.size()), nullptr, 0);
+    std::wstring wcmd(wlen, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, fullCmd.c_str(),
+                        static_cast<int>(fullCmd.size()), wcmd.data(), wlen);
 
     return CreateProcessW(
         nullptr, wcmd.data(),
