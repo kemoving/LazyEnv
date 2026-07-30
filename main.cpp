@@ -42,7 +42,6 @@
 #include <format>
 #include <vector>
 #include <algorithm>
-#include <eh.h>
 #include <functional>
 #include <memory>
 
@@ -299,11 +298,16 @@ struct ThreadPayload {
     std::function<void()> onError;
 };
 
+static void callOnErrorSafe(const std::function<void()>& onError) {
+    try {
+        onError();
+    } catch (...) {
+        // onError threw — thread is already in an error state, nothing to do
+    }
+}
+
 static DWORD WINAPI sehThreadProc(LPVOID param) {
     ThreadPayload* payload = static_cast<ThreadPayload*>(param);
-    // Also register SE translator on this background thread, so that
-    // payload->onError() (which runs outside __try) gets protection too.
-    installSeTranslator();
     bool sehException = false;
     __try {
         payload->work();
@@ -311,11 +315,7 @@ static DWORD WINAPI sehThreadProc(LPVOID param) {
         sehException = true;
     }
     if (sehException && payload->onError) {
-        try {
-            payload->onError();
-        } catch (...) {
-            // onError threw — thread is already in an error state, nothing to do
-        }
+        callOnErrorSafe(payload->onError);
     }
     delete payload;
     return 0;
@@ -1097,30 +1097,31 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 
-// ---------------------------------------------------------------------------
-// SE-to-C++ exception translator
-//
-// C++ try-catch cannot catch ACCESS_VIOLATION (C0000005) — it's an SEH
-// structured exception, not a C++ exception. MSVC's _set_se_translator
-// installs a per-thread callback that converts any unhandled SEH exception
-// into a C++ exception. This makes the existing try-catch blocks (in
-// WebView2 callbacks and elsewhere) effective for hardware exceptions,
-// preventing the fatal C000041D (STATUS_FATAL_USER_CALLBACK_EXCEPTION).
-// ---------------------------------------------------------------------------
-static void installSeTranslator() {
-    _set_se_translator([](unsigned int code, [[maybe_unused]] EXCEPTION_POINTERS* ep) {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "SEH exception 0x%08X", code);
-        throw std::runtime_error(buf);
-    });
+
+
+// Message loop helper — pure C signature, safe inside __try (avoids C2712).
+// DispatchMessageW calls WndProc which may use C++ objects, but C2712 only
+// inspects the function that directly contains __try.
+static void dispatchOneMessage(_Inout_ MSG* msg) {
+    TranslateMessage(msg);
+    DispatchMessageW(msg);
+}
+
+// Message loop in its own function — no C++ local objects, safe for __try.
+static void runMessageLoop() {
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0)) {
+        __try {
+            dispatchOneMessage(&msg);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            OutputDebugStringA("Message loop: SEH exception caught\n");
+        }
+    }
 }
 
 // WinMain
 // ---------------------------------------------------------------------------
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
-    // Convert SEH exceptions to C++ exceptions on the main (UI) thread.
-    // This allows WebView2 callback try-catch to handle ACCESS_VIOLATION.
-    installSeTranslator();
     // Enable Per-Monitor DPI awareness (v2)
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
@@ -1183,22 +1184,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     ShowWindow(g_mainWindow, nCmdShow);
     UpdateWindow(g_mainWindow);
 
-    // Message loop with SEH-to-C++ fallback protection.
-    // ACCESS_VIOLATION on the UI thread (e.g. in WebView2 callbacks or
-    // WndProc) is converted by the SE translator into std::runtime_error,
-    // which this try-catch catches so the process keeps running.
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0)) {
-        try {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        } catch (const std::exception& e) {
-            OutputDebugStringA(("Message loop error: " + std::string(e.what()) + "\n").c_str());
-        } catch (...) {
-            OutputDebugStringA("Message loop: unknown fatal error\n");
-        }
-    }
+    // Run message loop with SEH protection.
+    // ACCESS_VIOLATION (C0000005) on the UI thread cannot be caught by
+    // C++ try-catch. __try/__except in runMessageLoop captures it so the
+    // process keeps running instead of dying with C000041D.
+    runMessageLoop();
 
     CoUninitialize();
-    return static_cast<int>(msg.wParam);
+    return 0;
 }
