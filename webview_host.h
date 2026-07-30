@@ -32,8 +32,6 @@
 #include <string>
 #include <functional>
 #include <memory>
-#include <queue>
-#include <mutex>
 
 namespace lazyenv {
 
@@ -67,12 +65,12 @@ public:
     // to the UI thread via PostMessage + WM_WEBVIEW_POST_MESSAGE.
     void postMessage(const std::string& json);
 
-    // Process pending messages on the UI thread.
-    // Must be called from WndProc when WM_WEBVIEW_POST_MESSAGE is received.
-    void processPendingMessages();
-
     // Resize the WebView to fill the parent window.
     void resize();
+
+    // Deliver a JSON message directly to the web layer.
+    // MUST be called on the UI thread only (called from WndProc).
+    void deliverMessage(const std::string& json);
 
     // Check if WebView2 runtime is installed.
     static bool isRuntimeAvailable();
@@ -80,16 +78,15 @@ public:
     // Get the underlying controller (for advanced use).
     ICoreWebView2Controller* getController() const;
 
+    // Get the underlying webview (for direct PostWebMessageAsString).
+    ICoreWebView2* getWebView() const;
+
 private:
     HWND                                          parentHwnd_ = nullptr;
     Microsoft::WRL::ComPtr<ICoreWebView2Controller> controller_;
     Microsoft::WRL::ComPtr<ICoreWebView2>           webview_;
     MessageHandler                                messageHandler_;
     std::wstring                                  pendingUri_;
-
-    // Thread-safe message queue
-    std::mutex                                    queueMutex_;
-    std::queue<std::string>                       messageQueue_;
 
     void onWebViewCreated(ICoreWebView2Controller* controller);
     void setupMessageBridge();

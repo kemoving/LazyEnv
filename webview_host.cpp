@@ -219,45 +219,21 @@ void WebViewHost::setMessageHandler(MessageHandler handler) {
 
 // ---------------------------------------------------------------------------
 // postMessage - THREAD-SAFE
+//
+// Instead of a shared queue + mutex (which crashes when the mutex internal
+// state is corrupted by SEH stack damage), we PostMessageW a heap-allocated
+// std::string* directly. Windows' message queue is inherently thread-safe.
+// The UI thread receives WM_WEBVIEW_POST_MESSAGE, converts to wstring,
+// calls PostWebMessageAsString, and deletes the pointer.
 // ---------------------------------------------------------------------------
 void WebViewHost::postMessage(const std::string& json) {
     if (!parentHwnd_) return;
 
-    // Use try_lock instead of lock_guard as a defensive measure:
-    // If queueMutex_ has been corrupted (e.g. by a prior SEH stack smash),
-    // mtx_do_lock on a zeroed mutex would ACCESS_VIOLATION at 0x00000000.
-    // try_lock is a non-blocking probe: if the mutex internal state is
-    // invalid, we silently drop the message rather than crashing.
-    //
-    // In normal operation try_lock always succeeds immediately because
-    // messageQueue_ is only ever touched under this mutex and held for a
-    // trivial push/pop — there is zero contention.
-    if (queueMutex_.try_lock()) {
-        messageQueue_.push(json);
-        queueMutex_.unlock();
-        PostMessageW(parentHwnd_, WM_WEBVIEW_POST_MESSAGE, 0, 0);
-    }
-    // else: mutex state corrupted — drop message silently
-}
-
-// ---------------------------------------------------------------------------
-// processPendingMessages - MUST be called on UI thread only
-// ---------------------------------------------------------------------------
-void WebViewHost::processPendingMessages() {
-    if (!webview_) return;
-
-    std::queue<std::string> batch;
-    {
-        // Same defensive try_lock pattern as postMessage
-        if (!queueMutex_.try_lock()) return;
-        batch.swap(messageQueue_);
-        queueMutex_.unlock();
-    }
-
-    while (!batch.empty()) {
-        std::wstring wjson = utf8ToWide(batch.front());
-        webview_->PostWebMessageAsString(wjson.c_str());
-        batch.pop();
+    auto* msg = new std::string(json);
+    if (!PostMessageW(parentHwnd_, WM_WEBVIEW_POST_MESSAGE, 0,
+                      reinterpret_cast<LPARAM>(msg))) {
+        // Window may have been destroyed between the check and PostMessageW
+        delete msg;
     }
 }
 
@@ -268,8 +244,18 @@ void WebViewHost::resize() {
     controller_->put_Bounds(bounds);
 }
 
+void WebViewHost::deliverMessage(const std::string& json) {
+    if (!webview_) return;
+    std::wstring wjson = utf8ToWide(json);
+    webview_->PostWebMessageAsString(wjson.c_str());
+}
+
 ICoreWebView2Controller* WebViewHost::getController() const {
     return controller_.Get();
+}
+
+ICoreWebView2* WebViewHost::getWebView() const {
+    return webview_.Get();
 }
 
 } // namespace lazyenv

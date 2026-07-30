@@ -1124,9 +1124,14 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     // WebView2 thread-safe message delivery
+    // postMessage() allocates a std::string* and posts it via lParam.
     case lazyenv::WM_WEBVIEW_POST_MESSAGE: {
         try {
-            g_webview.processPendingMessages();
+            auto* msg = reinterpret_cast<std::string*>(lParam);
+            if (msg) {
+                g_webview.deliverMessage(*msg);
+            }
+            delete msg;
         } catch (const std::exception& e) {
             // PostWebMessageAsString or JSON conversion threw — log and swallow
             OutputDebugStringA(("WM_WEBVIEW_POST_MESSAGE error: " + std::string(e.what()) + "\n").c_str());
@@ -1143,9 +1148,17 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
 
-    case WM_DESTROY:
+    case WM_DESTROY: {
+        // Drain any pending WM_WEBVIEW_POST_MESSAGE messages to avoid
+        // leaking the heap-allocated std::string* objects.
+        MSG msg;
+        while (PeekMessageW(&msg, g_mainWindow, lazyenv::WM_WEBVIEW_POST_MESSAGE,
+                            lazyenv::WM_WEBVIEW_POST_MESSAGE, PM_REMOVE)) {
+            delete reinterpret_cast<std::string*>(msg.lParam);
+        }
         PostQuitMessage(0);
         return 0;
+    }
 
     default:
         return DefWindowProcW(hwnd, msg, wParam, lParam);
