@@ -998,11 +998,17 @@ std::string handleWebMessage(const std::string& message) {
 
 // ---------------------------------------------------------------------------
 // Vectored Exception Handler — fires BEFORE any SEH __try/__except.
-// This is the absolute first line of defense against ACCESS_VIOLATION.
 //
-// On background threads: suppress the crash to prevent double-fault
-// process death when an exception escapes from inside a __except handler.
-// On the UI thread: let it propagate to our SEH wrappers (WndProc/message loop).
+// We no longer suppress ACCESS_VIOLATION on background threads because:
+// 1. EXCEPTION_CONTINUE_EXECUTION re-executes the faulting instruction,
+//    creating an infinite loop if the root cause (e.g. a corrupted pipe
+//    handle) is not transient. This floods the debug output.
+// 2. The inner pipe-read SEH handlers (sehReadPipeLoop / sehReadPipeRaw
+//    in installer.cpp) are now pure C with no C++ destructors, so they
+//    can safely exit an __except handler without risking a double fault.
+//
+// This VeH now serves only as a diagnostic log point. The actual crash
+// suppression is handled by the layered SEH and try/catch guards.
 // ---------------------------------------------------------------------------
 static LONG CALLBACK vectoredExceptionHandler(_In_ EXCEPTION_POINTERS* ep) {
     DWORD code = ep->ExceptionRecord->ExceptionCode;
@@ -1016,14 +1022,9 @@ static LONG CALLBACK vectoredExceptionHandler(_In_ EXCEPTION_POINTERS* ep) {
              GetCurrentThreadId());
     OutputDebugStringA(buf);
 
-    // Background thread: suppress to prevent process death from double fault
-    if (g_mainWindow &&
-        GetCurrentThreadId() != GetWindowThreadProcessId(g_mainWindow, nullptr)) {
-        OutputDebugStringA("LazyEnv VeH: suppressing background thread crash\n");
-        return EXCEPTION_CONTINUE_EXECUTION;
-    }
-
-    return EXCEPTION_CONTINUE_SEARCH;  // UI thread: let SEH handle it
+    // Always continue search — let the inner SEH guards in installer.cpp
+    // (sehReadPipeLoop / sehReadPipeRaw) handle the exception gracefully.
+    return EXCEPTION_CONTINUE_SEARCH;
 }
 
 // ---------------------------------------------------------------------------
