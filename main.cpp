@@ -42,6 +42,7 @@
 #include <format>
 #include <vector>
 #include <algorithm>
+#include <functional>
 #include <memory>
 
 // ---------------------------------------------------------------------------
@@ -283,11 +284,43 @@ std::string probeCommand(const std::string& command, const std::string& category
         jsonEscape(command));
 }
 
-// SEH wrapper: ACCESS_VIOLATION (C0000005) cannot be caught by C++ try-catch.
-// We need __try/__except to prevent the process from crashing when a background
-// thread hits a memory access violation. The actual work with C++ objects is
-// in a separate function because MSVC forbids objects with destructors inside
-// __try blocks.
+// ---------------------------------------------------------------------------
+// Generic SEH-safe background thread launcher
+//
+// C++ try-catch cannot catch ACCESS_VIOLATION (C0000005). We use Win32
+// CreateThread + __try/__except as the entry point for all background work.
+// The SEH thread proc must NOT contain any C++ objects with destructors
+// (MSVC C2712 restriction), so the work/error functors are stored on the
+// heap and accessed via raw pointers.
+// ---------------------------------------------------------------------------
+struct ThreadPayload {
+    std::function<void()> work;
+    std::function<void()> onError;
+};
+
+static DWORD WINAPI sehThreadProc(LPVOID param) {
+    ThreadPayload* payload = static_cast<ThreadPayload*>(param);
+    bool sehException = false;
+    __try {
+        payload->work();
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        sehException = true;
+    }
+    if (sehException && payload->onError) {
+        payload->onError();
+    }
+    delete payload;
+    return 0;
+}
+
+static void launchThreadSafe(std::function<void()> work,
+                             std::function<void()> onError = nullptr) {
+    auto* payload = new ThreadPayload{std::move(work), std::move(onError)};
+    HANDLE h = CreateThread(nullptr, 0, sehThreadProc, payload, 0, nullptr);
+    if (h) CloseHandle(h);  // detached — thread owns its own lifecycle
+}
+
+// SEH wrapper for environment detection (kept inline for clarity)
 static void doDetectEnvironments() {
     try {
         std::string envJson = detectInstalledEnvironments();
@@ -304,18 +337,6 @@ static void doDetectEnvironments() {
 // Post an error message — must be a separate function free of __try
 static void reportEnvDetectionSEHError() {
     g_webview.postMessage("{\"action\":\"environmentsDetected\",\"environments\":[],\"error\":\"Fatal system exception (SEH)\"}");
-}
-
-static void detectEnvironmentsWithSEH() {
-    bool sehException = false;
-    __try {
-        doDetectEnvironments();
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        sehException = true;
-    }
-    if (sehException) {
-        reportEnvDetectionSEHError();
-    }
 }
 
 } // anonymous namespace
@@ -357,7 +378,7 @@ std::string handleWebMessage(const std::string& message) {
 
     // ------ Detect installed environments ------
     if (action == "detectEnvironments") {
-        std::thread(detectEnvironmentsWithSEH).detach();
+        launchThreadSafe(doDetectEnvironments, reportEnvDetectionSEHError);
         return "{\"action\":\"detectStarted\"}";
     }
 
@@ -367,21 +388,23 @@ std::string handleWebMessage(const std::string& message) {
         std::string cat = extractJsonValue(message, "category");
         if (cat.empty()) cat = "other";
 
-        std::thread([cmd, cat]() {
+        launchThreadSafe([cmd, cat]() {
             try {
                 std::string result = probeCommand(cmd, cat);
                 g_webview.postMessage(result);
             } catch (...) {
                 g_webview.postMessage("{\"action\":\"probeResult\",\"found\":false,\"command\":\"" + jsonEscape(cmd) + "\",\"error\":true}");
             }
-        }).detach();
+        }, [cmd]() {
+            g_webview.postMessage("{\"action\":\"probeResult\",\"found\":false,\"command\":\"" + jsonEscape(cmd) + "\",\"error\":\"Fatal SEH exception\"}");
+        });
         return "{\"action\":\"probeStarted\"}";
     }
 
     // ------ Uninstall package ------
     if (action == "uninstallPackage") {
         std::string pkgName = extractJsonValue(message, "command");
-        std::thread([pkgName]() {
+        launchThreadSafe([pkgName]() {
             try {
                 std::string output;
                 std::string cmd = "winget uninstall --name \"" + pkgName + "\" --silent --accept-source-agreements 2>&1";
@@ -396,7 +419,12 @@ std::string handleWebMessage(const std::string& message) {
                     jsonEscape(pkgName));
                 g_webview.postMessage(respMsg);
             }
-        }).detach();
+        }, [pkgName]() {
+            std::string respMsg = std::format(
+                "{{\"action\":\"uninstallResult\",\"command\":\"{}\",\"success\":false,\"error\":\"Fatal SEH exception\"}}",
+                jsonEscape(pkgName));
+            g_webview.postMessage(respMsg);
+        });
         return "{\"action\":\"uninstallStarted\"}";
     }
 
@@ -430,7 +458,7 @@ std::string handleWebMessage(const std::string& message) {
         auto catalog = lazyenv::getDefaultCatalog();
         std::string snapId = g_rollback.createSnapshot("Pre-install snapshot");
 
-        std::thread([ids, catalog, snapId]() {
+        launchThreadSafe([ids, catalog, snapId]() {
             try {
             int total = static_cast<int>(ids.size());
             int current = 0;
@@ -523,7 +551,12 @@ std::string handleWebMessage(const std::string& message) {
                     jsonEscape(snapId));
                 g_webview.postMessage(m);
             }
-        }).detach();
+        }, [snapId]() {
+            std::string m = std::format(
+                "{{\"action\":\"installComplete\",\"snapshotId\":\"{}\",\"error\":\"Fatal SEH exception during installation\"}}",
+                jsonEscape(snapId));
+            g_webview.postMessage(m);
+        });
 
         return std::format("{{\"action\":\"installStarted\",\"snapshotId\":\"{}\"}}", jsonEscape(snapId));
     }
@@ -533,7 +566,7 @@ std::string handleWebMessage(const std::string& message) {
         std::string id = extractJsonValue(message, "packageId");
         auto catalog = lazyenv::getDefaultCatalog();
 
-        std::thread([id, catalog]() {
+        launchThreadSafe([id, catalog]() {
             try {
             lazyenv::PackageInfo pkg;
             for (auto& p : catalog) {
@@ -606,7 +639,13 @@ std::string handleWebMessage(const std::string& message) {
                     jsonEscape(id));
                 g_webview.postMessage(m);
             }
-        }).detach();
+        }, [id]() {
+            std::string m = std::format(
+                "{{\"action\":\"installProgress\",\"packageId\":\"{}\","
+                "\"status\":\"failed\",\"message\":\"Fatal SEH exception during retry\"}}",
+                jsonEscape(id));
+            g_webview.postMessage(m);
+        });
 
         return "{\"action\":\"retryStarted\"}";
     }
@@ -660,7 +699,7 @@ std::string handleWebMessage(const std::string& message) {
         // complex; instead we use the COM file dialog directly here since
         // handleWebMessage is called from the UI thread context.
         HWND owner = g_mainWindow;
-        std::thread([id, owner]() {
+        launchThreadSafe([id, owner]() {
             // Must CoInitialize for file dialog on this thread
             CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
@@ -709,7 +748,12 @@ std::string handleWebMessage(const std::string& message) {
                 pDialog->Release();
             }
             CoUninitialize();
-        }).detach();
+        }, [id]() {
+            std::string m = std::format(
+                "{{\"action\":\"exportResult\",\"success\":false,\"snapshotId\":\"{}\",\"error\":\"Fatal SEH exception\"}}",
+                jsonEscape(id));
+            g_webview.postMessage(m);
+        });
 
         return "";
     }
@@ -717,7 +761,7 @@ std::string handleWebMessage(const std::string& message) {
     // ------ Import snapshot from file ------
     if (action == "importSnapshot") {
         HWND owner = g_mainWindow;
-        std::thread([owner]() {
+        launchThreadSafe([owner]() {
             CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
             IFileOpenDialog* pDialog = nullptr;
@@ -760,7 +804,9 @@ std::string handleWebMessage(const std::string& message) {
                 pDialog->Release();
             }
             CoUninitialize();
-        }).detach();
+        }, []() {
+            g_webview.postMessage("{\"action\":\"importResult\",\"success\":false,\"error\":\"Fatal SEH exception\"}");
+        });
 
         return "";
     }
