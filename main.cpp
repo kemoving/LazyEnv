@@ -301,6 +301,11 @@ static void doDetectEnvironments() {
     }
 }
 
+// Post an error message — must be a separate function free of __try
+static void reportEnvDetectionSEHError() {
+    g_webview.postMessage("{\"action\":\"environmentsDetected\",\"environments\":[],\"error\":\"Fatal system exception (SEH)\"}");
+}
+
 static void detectEnvironmentsWithSEH() {
     bool sehException = false;
     __try {
@@ -309,7 +314,7 @@ static void detectEnvironmentsWithSEH() {
         sehException = true;
     }
     if (sehException) {
-        g_webview.postMessage("{\"action\":\"environmentsDetected\",\"environments\":[],\"error\":\"Fatal system exception (SEH)\"}");
+        reportEnvDetectionSEHError();
     }
 }
 
