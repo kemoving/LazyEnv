@@ -173,6 +173,8 @@
             "recovery.importSuccess":           "Snapshot imported successfully.",
             "recovery.importFailed":            "Failed to import snapshot. Check file format.",
             "recovery.createTitle":             "Create Snapshot",
+            "recovery.createSuccess":           "Snapshot created successfully.",
+            "recovery.createFailed":            "Failed to create snapshot.",
             "recovery.descLabel":               "Description (optional)",
             "recovery.defaultDesc":             "Manual snapshot",
 
@@ -338,6 +340,8 @@
             "recovery.importSuccess":           "\u5feb\u7167\u5df2\u6210\u529f\u5bfc\u5165\u3002",
             "recovery.importFailed":            "\u5bfc\u5165\u5feb\u7167\u5931\u8d25\u3002\u8bf7\u68c0\u67e5\u6587\u4ef6\u683c\u5f0f\u3002",
             "recovery.createTitle":             "\u521b\u5efa\u5feb\u7167",
+            "recovery.createSuccess":           "\u5feb\u7167\u5df2\u6210\u529f\u521b\u5efa\u3002",
+            "recovery.createFailed":            "\u521b\u5efa\u5feb\u7167\u5931\u8d25\u3002",
             "recovery.descLabel":               "\u63cf\u8ff0\uff08\u53ef\u9009\uff09",
             "recovery.defaultDesc":             "\u624b\u52a8\u5feb\u7167",
 

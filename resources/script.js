@@ -125,7 +125,12 @@
                 break;
 
             case "snapshotCreated":
-                loadSnapshots();
+                if (d.success === false) {
+                    showToast(t("recovery.createFailed"), "error");
+                } else {
+                    showToast(t("recovery.createSuccess"), "success");
+                    loadSnapshots();
+                }
                 break;
 
             case "snapshotList":
@@ -283,8 +288,24 @@
             setTimeout(function () { handleNative({ action: "installProgress", packageId: rid, status: "running", message: "Retrying...", command: rcmd }); }, 200);
             setTimeout(function () { handleNative({ action: "installProgress", packageId: rid, status: "success", message: "Done", command: rcmd, output: "", exitCode: 0 }); }, 2000);
         }
+        if (obj.action === "createSnapshot") {
+            setTimeout(function () { handleNative({ action: "snapshotCreated", id: "mock-snap-" + Date.now() }); }, 200);
+        }
         if (obj.action === "listSnapshots") {
-            setTimeout(function () { handleNative({ action: "snapshotList", snapshots: [] }); }, 200);
+            setTimeout(function () {
+                handleNative({
+                    action: "snapshotList",
+                    snapshots: [
+                        { id: "mock-001", timestamp: "2026-07-30T10:00:00Z", description: "Manual snapshot", userVarCount: 12, systemVarCount: 5 },
+                    ]
+                });
+            }, 200);
+        }
+        if (obj.action === "restoreSnapshot") {
+            setTimeout(function () { handleNative({ action: "restoreResult", success: true, snapshotId: obj.snapshotId || "" }); }, 300);
+        }
+        if (obj.action === "deleteSnapshot") {
+            setTimeout(function () { handleNative({ action: "deleteResult", success: true, snapshotId: obj.snapshotId || "" }); }, 200);
         }
         if (obj.action === "listEnvVars") {
             setTimeout(function () {
@@ -758,8 +779,8 @@
         var container = document.getElementById("checkResults");
         container.innerHTML = items.map(function (c) {
             var icon = "";
-            if (c.ok === "ok") icon = '<svg width="18" height="18" viewBox="0 0 16 16" fill="var(--success)"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>';
-            else if (c.ok === "fail") icon = '<svg width="18" height="18" viewBox="0 0 16 16" fill="var(--error)"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM5.354 4.646a.5.5 0 1 0-.708.708L7.293 8l-2.647 2.646a.5.5 0 0 0 .708.708L8 8.707l2.646 2.647a.5.5 0 0 0 .708-.708L8.707 8l2.647-2.646a.5.5 0 0 0-.708-.708L8 7.293 5.354 4.646z"/></svg>';
+            if (c.ok === "ok") icon = '<svg width="18" height="18" viewBox="0 0 16 16" fill="var(--status-success)"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>';
+            else if (c.ok === "fail") icon = '<svg width="18" height="18" viewBox="0 0 16 16" fill="var(--status-error)"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM5.354 4.646a.5.5 0 1 0-.708.708L7.293 8l-2.647 2.646a.5.5 0 0 0 .708.708L8 8.707l2.646 2.647a.5.5 0 0 0 .708-.708L8.707 8l2.647-2.646a.5.5 0 0 0-.708-.708L8 7.293 5.354 4.646z"/></svg>';
             else icon = '<div class="spinner-sm"></div>';
             return '<div class="card-row"><div class="card-row__icon">' + icon + '</div>' +
                 '<div class="card-row__body"><div class="card-row__title">' + esc(c.label) + '</div>' +
@@ -893,7 +914,7 @@
                     statusText = t("install.installing");
                     break;
                 case "success":
-                    iconHtml = '<svg width="16" height="16" viewBox="0 0 16 16" fill="var(--success)"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>';
+                    iconHtml = '<svg width="16" height="16" viewBox="0 0 16 16" fill="var(--status-success)"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>';
                     cls = " card-row--success";
                     statusText = t("install.installed");
                     break;

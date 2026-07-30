@@ -673,7 +673,9 @@ std::string handleWebMessage(const std::string& message) {
     if (action == "createSnapshot") {
         std::string desc = extractJsonValue(message, "description");
         std::string id = g_rollback.createSnapshot(desc);
-        return std::format("{{\"action\":\"snapshotCreated\",\"id\":\"{}\"}}", jsonEscape(id));
+        bool ok = !id.empty();
+        return std::format("{{\"action\":\"snapshotCreated\",\"id\":\"{}\",\"success\":{}}}",
+                           jsonEscape(id), ok ? "true" : "false");
     }
 
     // ------ List snapshots ------
