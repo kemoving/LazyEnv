@@ -267,7 +267,10 @@ static void sehReadPipeLoop(HANDLE hRead, RawExecResult* result) {
         result->outputData[result->outputLen] = '\0';
         result->success = true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        result->outputData[result->outputLen] = '\0';  // null-terminate partial
+        // DO NOT touch result->outputData[result->outputLen] — if the
+        // original AV corrupted outputLen or the buffer pointer, writing
+        // here would trigger a second ACCESS_VIOLATION inside the handler
+        // (double fault), which kills the process immediately.
         result->success = false;
     }
 }
@@ -312,8 +315,11 @@ int Installer::runCommand(const std::string& cmdLine,
     CloseHandle(ph.hRead);
 
     if (!raw.success) {
-        // SEH caught an ACCESS_VIOLATION during pipe read — save partial output
-        if (raw.outputLen > 0)
+        // SEH caught an ACCESS_VIOLATION during pipe read.
+        // outputLen may have been corrupted by the fault — clamp it to
+        // the actual buffer size before using it.
+        const DWORD kMaxBuf = static_cast<DWORD>(sizeof(raw.outputData));
+        if (raw.outputLen > 0 && raw.outputLen <= kMaxBuf)
             output.assign(raw.outputData, raw.outputLen);
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
@@ -354,7 +360,8 @@ static bool sehReadPipeRaw(HANDLE hRead, char* outBuf, DWORD bufCapacity, DWORD*
         outBuf[*outLen] = '\0';
         ok = true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        outBuf[*outLen] = '\0';
+        // See sehReadPipeLoop above: do not write outBuf[*outLen] here —
+        // it may trigger a double fault if the original AV corrupted *outLen.
         ok = false;
     }
     return ok;
@@ -386,8 +393,10 @@ int Installer::runCommandStreaming(const std::string& cmdLine,
     CloseHandle(ph.hRead);
 
     if (!readOk) {
-        // SEH caught an exception during I/O — save what we got
-        if (rawLen > 0) {
+        // SEH caught an exception during I/O — save what we got.
+        // Clamp rawLen to buffer capacity to guard against corruption.
+        const DWORD kMaxBuf = static_cast<DWORD>(sizeof(rawBuf));
+        if (rawLen > 0 && rawLen <= kMaxBuf) {
             rawBuf[rawLen] = '\0';
             fullOutput.assign(rawBuf, rawLen);
         }

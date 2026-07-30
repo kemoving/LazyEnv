@@ -223,12 +223,21 @@ void WebViewHost::setMessageHandler(MessageHandler handler) {
 void WebViewHost::postMessage(const std::string& json) {
     if (!parentHwnd_) return;
 
-    {
-        std::lock_guard<std::mutex> lock(queueMutex_);
+    // Use try_lock instead of lock_guard as a defensive measure:
+    // If queueMutex_ has been corrupted (e.g. by a prior SEH stack smash),
+    // mtx_do_lock on a zeroed mutex would ACCESS_VIOLATION at 0x00000000.
+    // try_lock is a non-blocking probe: if the mutex internal state is
+    // invalid, we silently drop the message rather than crashing.
+    //
+    // In normal operation try_lock always succeeds immediately because
+    // messageQueue_ is only ever touched under this mutex and held for a
+    // trivial push/pop — there is zero contention.
+    if (queueMutex_.try_lock()) {
         messageQueue_.push(json);
+        queueMutex_.unlock();
+        PostMessageW(parentHwnd_, WM_WEBVIEW_POST_MESSAGE, 0, 0);
     }
-
-    PostMessageW(parentHwnd_, WM_WEBVIEW_POST_MESSAGE, 0, 0);
+    // else: mutex state corrupted — drop message silently
 }
 
 // ---------------------------------------------------------------------------
@@ -239,8 +248,10 @@ void WebViewHost::processPendingMessages() {
 
     std::queue<std::string> batch;
     {
-        std::lock_guard<std::mutex> lock(queueMutex_);
+        // Same defensive try_lock pattern as postMessage
+        if (!queueMutex_.try_lock()) return;
         batch.swap(messageQueue_);
+        queueMutex_.unlock();
     }
 
     while (!batch.empty()) {

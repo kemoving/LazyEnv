@@ -999,16 +999,18 @@ std::string handleWebMessage(const std::string& message) {
 // ---------------------------------------------------------------------------
 // Vectored Exception Handler — fires BEFORE any SEH __try/__except.
 //
-// We no longer suppress ACCESS_VIOLATION on background threads because:
-// 1. EXCEPTION_CONTINUE_EXECUTION re-executes the faulting instruction,
-//    creating an infinite loop if the root cause (e.g. a corrupted pipe
-//    handle) is not transient. This floods the debug output.
-// 2. The inner pipe-read SEH handlers (sehReadPipeLoop / sehReadPipeRaw
-//    in installer.cpp) are now pure C with no C++ destructors, so they
-//    can safely exit an __except handler without risking a double fault.
+// Logs ACCESS_VIOLATION details for diagnostic purposes, then lets the
+// exception propagate to the inner SEH __try/__except handler.
 //
-// This VeH now serves only as a diagnostic log point. The actual crash
-// suppression is handled by the layered SEH and try/catch guards.
+// IMPORTANT: We do NOT use EXCEPTION_CONTINUE_EXECUTION because it resumes
+// execution at the faulting instruction with the same corrupted register
+// state. This is extremely dangerous:
+//   - Stack-local variables (including std::mutex internals) may have been
+//     zeroed/corrupted by a prior AV's stack smash.
+//   - Resuming leads to cascading failures like mtx_do_lock(0x00000000).
+//
+// Instead we return EXCEPTION_CONTINUE_SEARCH to let the nearest
+// __try/__except catch it cleanly, which unwinds to a known-safe point.
 // ---------------------------------------------------------------------------
 static LONG CALLBACK vectoredExceptionHandler(_In_ EXCEPTION_POINTERS* ep) {
     DWORD code = ep->ExceptionRecord->ExceptionCode;
@@ -1022,8 +1024,7 @@ static LONG CALLBACK vectoredExceptionHandler(_In_ EXCEPTION_POINTERS* ep) {
              GetCurrentThreadId());
     OutputDebugStringA(buf);
 
-    // Always continue search — let the inner SEH guards in installer.cpp
-    // (sehReadPipeLoop / sehReadPipeRaw) handle the exception gracefully.
+    // Let inner SEH handlers deal with it properly via stack unwind
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
