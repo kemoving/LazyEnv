@@ -302,9 +302,13 @@ static void doDetectEnvironments() {
 }
 
 static void detectEnvironmentsWithSEH() {
+    bool sehException = false;
     __try {
         doDetectEnvironments();
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+        sehException = true;
+    }
+    if (sehException) {
         g_webview.postMessage("{\"action\":\"environmentsDetected\",\"environments\":[],\"error\":\"Fatal system exception (SEH)\"}");
     }
 }
