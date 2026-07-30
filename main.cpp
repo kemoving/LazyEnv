@@ -456,8 +456,19 @@ std::string handleWebMessage(const std::string& message) {
 
     // ------ Check winget ------
     if (action == "checkWinget") {
-        bool ok = lazyenv::Installer::isWingetAvailable();
-        return std::format("{{\"action\":\"wingetStatus\",\"available\":{}}}", ok ? "true" : "false");
+        launchThreadSafe([]() {
+            try {
+                bool ok = lazyenv::Installer::isWingetAvailable();
+                std::string m = std::format("{{\"action\":\"wingetStatus\",\"available\":{}}}",
+                                            ok ? "true" : "false");
+                g_webview.postMessage(m);
+            } catch (...) {
+                g_webview.postMessage("{\"action\":\"wingetStatus\",\"available\":false,\"error\":true}");
+            }
+        }, []() {
+            g_webview.postMessage("{\"action\":\"wingetStatus\",\"available\":false,\"error\":\"Fatal SEH exception\"}");
+        });
+        return "{\"action\":\"wingetCheckStarted\"}";
     }
 
     // ------ Install packages (async, with streaming log) ------
@@ -822,9 +833,21 @@ std::string handleWebMessage(const std::string& message) {
     // ------ Check command ------
     if (action == "checkCommand") {
         std::string cmd = extractJsonValue(message, "command");
-        bool ok = lazyenv::Installer::isCommandAvailable(cmd);
-        return std::format("{{\"action\":\"commandCheck\",\"command\":\"{}\",\"available\":{}}}",
-                           jsonEscape(cmd), ok ? "true" : "false");
+        launchThreadSafe([cmd]() {
+            try {
+                bool ok = lazyenv::Installer::isCommandAvailable(cmd);
+                std::string m = std::format("{{\"action\":\"commandCheck\",\"command\":\"{}\",\"available\":{}}}",
+                                           jsonEscape(cmd), ok ? "true" : "false");
+                g_webview.postMessage(m);
+            } catch (...) {
+                g_webview.postMessage("{\"action\":\"commandCheck\",\"available\":false,\"error\":true}");
+            }
+        }, [cmd]() {
+            std::string m = std::format("{{\"action\":\"commandCheck\",\"command\":\"{}\",\"available\":false,\"error\":\"Fatal SEH exception\"}}",
+                                       jsonEscape(cmd));
+            g_webview.postMessage(m);
+        });
+        return "{\"action\":\"commandCheckStarted\"}";
     }
 
     // ------ List environment variables (for Settings page) ------
@@ -974,9 +997,10 @@ std::string handleWebMessage(const std::string& message) {
 }
 
 // ---------------------------------------------------------------------------
-// Window procedure - borderless with DWM shadow
+// Window procedure (inner) — all real WndProc logic.
+// Does NOT use __try to avoid C2712 conflict with C++ local objects.
 // ---------------------------------------------------------------------------
-LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
         // Extend frame into client area for shadow effect
@@ -1096,6 +1120,44 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Window procedure (outer) — SEH wrapper with no C++ local objects.
+//
+// ACCESS_VIOLATION (C0000005) inside WndProcImpl is an SEH structured
+// exception that C++ try-catch cannot see. This __try/__except wrapper
+// catches it before it can escape into DispatchMessageW and become a
+// fatal C000041D. C2712 (no C++ objects in __try functions) is satisfied
+// because this function has none — all C++ code lives in WndProcImpl.
+// ---------------------------------------------------------------------------
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    __try {
+        return WndProcImpl(hwnd, msg, wParam, lParam);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        OutputDebugStringA("WndProc: SEH exception caught\n");
+        return 0;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Process-wide unhandled exception filter — absolute last resort.
+//
+// If any exception escapes ALL __try/__except blocks and try/catch blocks,
+// this filter fires before the process terminates. We log the exception
+// code for diagnostics but let the default handler run (dump creation).
+// This does NOT prevent the crash — it only aids debugging.
+// ---------------------------------------------------------------------------
+static LONG WINAPI unhandledExceptionFilter(_In_ EXCEPTION_POINTERS* ep) {
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+             "LazyEnv: Unhandled exception 0x%08X at 0x%p\n",
+             ep->ExceptionRecord->ExceptionCode,
+             ep->ExceptionRecord->ExceptionAddress);
+    OutputDebugStringA(buf);
+    return EXCEPTION_EXECUTE_HANDLER;  // let WER create dump + terminate
+}
+
+
+
 
 
 
@@ -1122,6 +1184,11 @@ static void runMessageLoop() {
 // WinMain
 // ---------------------------------------------------------------------------
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
+    // Install process-wide unhandled exception filter as the absolute
+    // last resort. Any exception that escapes all __try/__except and
+    // try/catch blocks will be logged here before WER creates a dump.
+    SetUnhandledExceptionFilter(unhandledExceptionFilter);
+
     // Enable Per-Monitor DPI awareness (v2)
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
