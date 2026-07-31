@@ -59,7 +59,14 @@ static lazyenv::RollbackManager g_rollback;
 // g_msgMutex is no longer needed; postMessage is now thread-safe via message queue
 static HWND                     g_mainWindow = nullptr;
 static bool                     g_isMaximized = false;
-static RECT                     g_normalRect = {};   // saved before "fake maximize"
+static RECT                     g_normalRect = {};     // saved before "fake maximize"
+
+// Window-resize animation state (maximize / restore transition)
+static RECT                     g_animFrom   = {};
+static RECT                     g_animTo     = {};
+static int                      g_animStep   = 0;
+static constexpr int            ANIM_STEPS   = 10;
+static constexpr UINT_PTR       ANIM_TIMER   = 0x1001;
 
 // ---------------------------------------------------------------------------
 // JSON helpers
@@ -372,37 +379,30 @@ std::string handleWebMessage(const std::string& message) {
         return "";
     }
     if (action == "windowMaximize") {
-        // Avoid ShowWindow(SW_MAXIMIZE/SW_RESTORE) entirely.
-        // Those window-state transitions cause WebView2 to keep
-        // its old GPU texture on shrink (maximized→normal), which
-        // leads to clipped rendering.
-        //
-        // Instead we stay in "normal" window state and use
-        // SetWindowPos to manually fill / restore to the work area.
-        // This is a plain resize — WebView2 handles it correctly
-        // in both directions.
+        // Bypass ShowWindow(SW_MAXIMIZE/SW_RESTORE) to avoid WebView2
+        // compositor keeping stale GPU textures on shrink.
+        // Instead, animate SetWindowPos in small steps so the transition
+        // looks smooth and WebView2 can keep up frame-by-frame.
         if (g_isMaximized) {
-            // Restore to saved normal rect
+            // ── Restore ──
             g_isMaximized = false;
-            SetWindowPos(g_mainWindow, nullptr,
-                         g_normalRect.left, g_normalRect.top,
-                         g_normalRect.right  - g_normalRect.left,
-                         g_normalRect.bottom - g_normalRect.top,
-                         SWP_NOZORDER | SWP_FRAMECHANGED);
+            GetWindowRect(g_mainWindow, &g_animFrom);
+            g_animTo = g_normalRect;
+            g_animStep = 0;
+            SetTimer(g_mainWindow, ANIM_TIMER, 20, nullptr);
         } else {
-            // Save current rect, then fill the monitor work area
-            GetWindowRect(g_mainWindow, &g_normalRect);
+            // ── Maximize ──
+            GetWindowRect(g_mainWindow, &g_normalRect);   // save current pos
             g_isMaximized = true;
+            GetWindowRect(g_mainWindow, &g_animFrom);
             HMONITOR mon = MonitorFromWindow(g_mainWindow,
                                              MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi{};
             mi.cbSize = sizeof(mi);
             GetMonitorInfoW(mon, &mi);
-            SetWindowPos(g_mainWindow, nullptr,
-                         mi.rcWork.left, mi.rcWork.top,
-                         mi.rcWork.right  - mi.rcWork.left,
-                         mi.rcWork.bottom - mi.rcWork.top,
-                         SWP_NOZORDER | SWP_FRAMECHANGED);
+            g_animTo = mi.rcWork;
+            g_animStep = 0;
+            SetTimer(g_mainWindow, ANIM_TIMER, 20, nullptr);
         }
         return "";
     }
@@ -1280,6 +1280,40 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case lazyenv::WM_WEBVIEW_DRAG_START: {
         ReleaseCapture();
         SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+        return 0;
+    }
+
+    // ── Window-resize animation timer (maximize / restore) ──
+    case WM_TIMER: {
+        if (wParam != ANIM_TIMER) break;
+
+        g_animStep++;
+        float t = (float)g_animStep / ANIM_STEPS;
+        if (t > 1.0f) t = 1.0f;
+
+        // Ease-out cubic: starts fast, decelerates at the end
+        float eased = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+
+        int x = g_animFrom.left  + (int)((g_animTo.left  - g_animFrom.left)  * eased);
+        int y = g_animFrom.top   + (int)((g_animTo.top   - g_animFrom.top)   * eased);
+        int w = (g_animFrom.right - g_animFrom.left) +
+                (int)(((g_animTo.right  - g_animTo.left) -
+                       (g_animFrom.right - g_animFrom.left)) * eased);
+        int h = (g_animFrom.bottom - g_animFrom.top) +
+                (int)(((g_animTo.bottom - g_animTo.top) -
+                       (g_animFrom.bottom - g_animFrom.top)) * eased);
+
+        SetWindowPos(hwnd, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOCOPYBITS);
+
+        if (g_animStep >= ANIM_STEPS) {
+            KillTimer(hwnd, ANIM_TIMER);
+            // Snap to exact target — avoids any rounding drift
+            SetWindowPos(hwnd, nullptr,
+                         g_animTo.left, g_animTo.top,
+                         g_animTo.right  - g_animTo.left,
+                         g_animTo.bottom - g_animTo.top,
+                         SWP_NOZORDER | SWP_NOCOPYBITS);
+        }
         return 0;
     }
 

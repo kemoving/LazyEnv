@@ -53,9 +53,14 @@
 
     // -----------------------------------------------------------------------
     // Viewport fix — C++ sends windowState with native client-area dimensions
-    // after put_Bounds and forceRefresh (if needed). ResizeObserver / resize
-    // serve as a fallback for incremental drag-resize.
+    // after put_Bounds. ResizeObserver / resize serve as a fallback for
+    // incremental drag-resize.
+    //
+    // We avoid display:none toggles (visible flicker) and throttle with rAF
+    // to prevent multiple reflows within the same animation frame.
     // -----------------------------------------------------------------------
+
+    var _reflowRAF = null;
 
     function setViewportVars(w, h) {
         document.documentElement.style.setProperty("--vw", (w * 0.01) + "px");
@@ -66,12 +71,15 @@
         var w = window.innerWidth  || document.documentElement.clientWidth;
         var h = window.innerHeight || document.documentElement.clientHeight;
         setViewportVars(w, h);
-        forceLayout();
-    }
 
-    function forceLayout() {
-        var app = document.querySelector(".app");
-        if (app) { app.style.display = "none"; void app.offsetHeight; app.style.display = ""; }
+        // Throttle: at most one forceLayout per animation frame
+        if (_reflowRAF === null) {
+            _reflowRAF = requestAnimationFrame(function () {
+                _reflowRAF = null;
+                var app = document.querySelector(".app");
+                if (app) void app.offsetHeight;  // non-visual reflow
+            });
+        }
     }
 
     // Keep ResizeObserver and resize event as fallbacks
@@ -230,11 +238,10 @@
                 isMaximized = d.maximized;
                 updateMaxBtn();
                 // Use native client-area dimensions — unaffected by
-                // WebView2 viewport caching. Then force a layout pass
-                // without overwriting the native values.
+                // WebView2 viewport caching. ResizeObserver handles
+                // the reflow naturally after the compositor settles.
                 if (typeof d.width === "number" && typeof d.height === "number") {
                     setViewportVars(d.width, d.height);
-                    forceLayout();
                 }
                 break;
 

@@ -21,7 +21,20 @@
    Matching Windows 11 Settings app visual language
    ============================================================================ */
 
+@property --vw {
+    syntax: '<length>';
+    inherits: true;
+    initial-value: 0px;
+}
+
+@property --vh {
+    syntax: '<length>';
+    inherits: true;
+    initial-value: 0px;
+}
+
 :root {
+    transition: --vw 0.15s ease-out, --vh 0.15s ease-out;
     /* Surface & Background */
     --bg-solid:             #202020;
     --bg-mica:              #1c1c1c;
