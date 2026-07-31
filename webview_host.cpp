@@ -256,12 +256,6 @@ void WebViewHost::resize() {
     controller_->put_Bounds(bounds);
 }
 
-void WebViewHost::forceRefresh() {
-    if (!controller_) return;
-    controller_->put_IsVisible(FALSE);
-    controller_->put_IsVisible(TRUE);
-}
-
 void WebViewHost::deliverMessage(const std::string& json) {
     if (!webview_) return;
     std::wstring wjson = utf8ToWide(json);

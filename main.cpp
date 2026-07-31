@@ -59,7 +59,7 @@ static lazyenv::RollbackManager g_rollback;
 // g_msgMutex is no longer needed; postMessage is now thread-safe via message queue
 static HWND                     g_mainWindow = nullptr;
 static bool                     g_isMaximized = false;
-static bool                     g_needsForceRefresh = false;
+static RECT                     g_normalRect = {};   // saved before "fake maximize"
 
 // ---------------------------------------------------------------------------
 // JSON helpers
@@ -372,16 +372,38 @@ std::string handleWebMessage(const std::string& message) {
         return "";
     }
     if (action == "windowMaximize") {
-        // Update g_isMaximized upfront so WM_NCCALCSIZE (which fires
-        // before WM_SIZE) uses the correct value for work-area inset.
-        g_isMaximized = !g_isMaximized;
-        g_needsForceRefresh = true;
+        // Avoid ShowWindow(SW_MAXIMIZE/SW_RESTORE) entirely.
+        // Those window-state transitions cause WebView2 to keep
+        // its old GPU texture on shrink (maximized→normal), which
+        // leads to clipped rendering.
+        //
+        // Instead we stay in "normal" window state and use
+        // SetWindowPos to manually fill / restore to the work area.
+        // This is a plain resize — WebView2 handles it correctly
+        // in both directions.
         if (g_isMaximized) {
-            ShowWindow(g_mainWindow, SW_MAXIMIZE);
+            // Restore to saved normal rect
+            g_isMaximized = false;
+            SetWindowPos(g_mainWindow, nullptr,
+                         g_normalRect.left, g_normalRect.top,
+                         g_normalRect.right  - g_normalRect.left,
+                         g_normalRect.bottom - g_normalRect.top,
+                         SWP_NOZORDER | SWP_FRAMECHANGED);
         } else {
-            ShowWindow(g_mainWindow, SW_RESTORE);
+            // Save current rect, then fill the monitor work area
+            GetWindowRect(g_mainWindow, &g_normalRect);
+            g_isMaximized = true;
+            HMONITOR mon = MonitorFromWindow(g_mainWindow,
+                                             MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi{};
+            mi.cbSize = sizeof(mi);
+            GetMonitorInfoW(mon, &mi);
+            SetWindowPos(g_mainWindow, nullptr,
+                         mi.rcWork.left, mi.rcWork.top,
+                         mi.rcWork.right  - mi.rcWork.left,
+                         mi.rcWork.bottom - mi.rcWork.top,
+                         SWP_NOZORDER | SWP_FRAMECHANGED);
         }
-        // WM_SIZE will post the windowState message to JS.
         return "";
     }
     if (action == "windowClose") {
@@ -1186,16 +1208,7 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_SIZE: {
-        g_isMaximized = (wParam == SIZE_MAXIMIZED);
         g_webview.resize();
-
-        // When triggered from our maximize/restore handler,
-        // force the compositor to rebuild its rendering surface.
-        if (g_needsForceRefresh) {
-            g_webview.forceRefresh();
-            g_needsForceRefresh = false;
-        }
-
         if (g_webview.getController()) {
             int cw = LOWORD(lParam);  // client area width
             int ch = HIWORD(lParam);  // client area height
