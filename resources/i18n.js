@@ -135,6 +135,8 @@
             "packages.searchPlaceholder":       "Search packages...",
             "packages.startInstall":            "Start Installation",
             "packages.selectedCount":           "{0} selected",
+            "packages.installed":               "Installed",
+            "packages.alreadyInstalled":        "Already installed on system",
 
             // Install
             "install.title":                    "Installation",
@@ -302,6 +304,8 @@
             "packages.searchPlaceholder":       "\u641c\u7d22\u8f6f\u4ef6\u5305...",
             "packages.startInstall":            "\u5f00\u59cb\u5b89\u88c5",
             "packages.selectedCount":           "\u5df2\u9009\u62e9 {0} \u4e2a",
+            "packages.installed":               "\u5df2\u5b89\u88c5",
+            "packages.alreadyInstalled":        "\u7cfb\u7edf\u4e2d\u5df2\u5b89\u88c5",
 
             // Install
             "install.title":                    "\u5b89\u88c5",

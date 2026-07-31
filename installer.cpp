@@ -51,6 +51,17 @@ bool Installer::isWingetAvailable() {
 }
 
 // ---------------------------------------------------------------------------
+// Check whether a specific package ID is already installed
+// ---------------------------------------------------------------------------
+bool Installer::isPackageInstalled(const std::string& packageId) {
+    std::string output;
+    std::string cmd = "winget list --id \"" + packageId + "\" --exact --accept-source-agreements";
+    int rc = runCommand(cmd, output, 15000);
+    // winget returns 0 and lists the package if installed
+    return rc == 0 && output.find(packageId) != std::string::npos;
+}
+
+// ---------------------------------------------------------------------------
 // Single package install
 // ---------------------------------------------------------------------------
 InstallResult Installer::installPackage(const PackageInfo& pkg) {

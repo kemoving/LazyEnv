@@ -81,6 +81,9 @@ public:
     // Check whether winget is available on this system.
     static bool isWingetAvailable();
 
+    // Check whether a specific package is already installed (by winget ID).
+    static bool isPackageInstalled(const std::string& packageId);
+
     // Install a single package via winget.
     InstallResult installPackage(const PackageInfo& pkg);
 

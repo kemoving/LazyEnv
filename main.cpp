@@ -471,6 +471,33 @@ std::string handleWebMessage(const std::string& message) {
         return "{\"action\":\"wingetCheckStarted\"}";
     }
 
+    // ------ Check if catalog packages are already installed ------
+    if (action == "checkInstalled") {
+        auto catalog = lazyenv::getDefaultCatalog();
+        launchThreadSafe([catalog]() {
+            try {
+                std::vector<std::string> installed;
+                for (auto& p : catalog) {
+                    if (lazyenv::Installer::isPackageInstalled(p.id)) {
+                        installed.push_back(p.id);
+                    }
+                }
+                std::string idsJson = "[";
+                for (size_t i = 0; i < installed.size(); ++i) {
+                    if (i > 0) idsJson += ",";
+                    idsJson += "\"" + jsonEscape(installed[i]) + "\"";
+                }
+                idsJson += "]";
+                g_webview.postMessage("{\"action\":\"installedList\",\"packageIds\":" + idsJson + "}");
+            } catch (...) {
+                g_webview.postMessage("{\"action\":\"installedList\",\"packageIds\":[]}");
+            }
+        }, []() {
+            g_webview.postMessage("{\"action\":\"installedList\",\"packageIds\":[]}");
+        });
+        return "{}";
+    }
+
     // ------ Install packages (async, with streaming log) ------
     if (action == "install") {
         auto ids = extractJsonArray(message, "packages");

@@ -236,14 +236,16 @@
             <!-- ==================== INSTALL ==================== -->
             <div class="page" id="page-install">
                 <h1 class="page-title" data-i18n="install.title">Installation</h1>
-                <p class="page-desc" data-i18n="install.desc">Installing selected packages...</p>
 
-                <div class="flex-between mb-md">
-                    <span id="installProgress" class="text-secondary"></span>
-                    <span id="installPercent" class="text-accent" style="font-weight:600"></span>
-                </div>
-                <div class="progress-bar" id="installProgressBar">
-                    <div class="progress-bar__fill" id="installProgressFill" style="width:0%"></div>
+                <div id="installProgressWrap">
+                    <p class="page-desc" data-i18n="install.desc">Installing selected packages...</p>
+                    <div class="flex-between mb-md">
+                        <span id="installProgress" class="text-secondary"></span>
+                        <span id="installPercent" class="text-accent" style="font-weight:600"></span>
+                    </div>
+                    <div class="progress-bar" id="installProgressBar">
+                        <div class="progress-bar__fill" id="installProgressFill" style="width:0%"></div>
+                    </div>
                 </div>
 
                 <div id="installList" class="mt-lg"></div>

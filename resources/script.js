@@ -44,6 +44,7 @@
     var installTotal = 0;
     var installCurrent = 0;
     var isMaximized = false;
+    var installedPackages = new Set(); // IDs of packages already installed on the system
 
     // Settings state
     var envVarScope = "user";   // "user" or "system"
@@ -108,6 +109,11 @@
                 if (typeof d.total === "number") installTotal = d.total;
                 renderInstallList();
                 updateProgressBar();
+                persistInstallResults();
+                if (d.status === "success") {
+                    installedPackages.add(d.packageId);
+                    persistInstalledPackages();
+                }
                 break;
 
             case "installLog":
@@ -122,6 +128,15 @@
                 preInstallSnapshotId = d.snapshotId || preInstallSnapshotId;
                 updateProgressBar();
                 renderInstallList();
+                persistInstallResults();
+                break;
+
+            case "installedList":
+                installedPackages = new Set(d.packageIds || []);
+                persistInstalledPackages();
+                if (currentPage === "packages" && catalog.length > 0) {
+                    renderCatalog(document.getElementById("pkgSearch").value);
+                }
                 break;
 
             case "snapshotCreated":
@@ -327,9 +342,47 @@
         if (obj.action === "deleteEnvVar") {
             setTimeout(function () { handleNative({ action: "envVarDeleteResult", success: true }); }, 300);
         }
-        if (obj.action === "windowMinimize" || obj.action === "windowMaximize" || obj.action === "windowClose" || obj.action === "windowDragStart") {
-            console.log("Window action:", obj.action);
+        if (obj.action === "checkInstalled") {
+            // Mock: simulate some common packages already installed on the system
+            setTimeout(function () {
+                handleNative({ action: "installedList", packageIds: ["Git.Git", "OpenJS.NodeJS.LTS"] });
+            }, 200);
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Persistence helpers
+    // -----------------------------------------------------------------------
+    function persistInstallResults() {
+        try {
+            var obj = {};
+            installResults.forEach(function (r, id) { obj[id] = r; });
+            localStorage.setItem("lazyenv_install_results", JSON.stringify(obj));
+        } catch (e) { /* ignore */ }
+    }
+
+    function persistInstalledPackages() {
+        try {
+            localStorage.setItem("lazyenv_installed_packages", JSON.stringify(Array.from(installedPackages)));
+        } catch (e) { /* ignore */ }
+    }
+
+    function loadPersistedState() {
+        try {
+            var raw = localStorage.getItem("lazyenv_install_results");
+            if (raw) {
+                var parsed = JSON.parse(raw);
+                Object.keys(parsed).forEach(function (id) {
+                    installResults.set(id, parsed[id]);
+                });
+            }
+            var rawInstalled = localStorage.getItem("lazyenv_installed_packages");
+            if (rawInstalled) {
+                JSON.parse(rawInstalled).forEach(function (id) {
+                    installedPackages.add(id);
+                });
+            }
+        } catch (e) { /* ignore corrupt data */ }
     }
 
     // -----------------------------------------------------------------------
@@ -350,7 +403,11 @@
         if (page === "home") sendNative({ action: "detectEnvironments" });
         if (page === "settings") loadEnvVars();
         if (page === "syscheck") initCheck();
-        if (page === "packages" && catalog.length === 0) sendNative({ action: "getCatalog" });
+        if (page === "packages") {
+            sendNative({ action: "checkInstalled" });
+            if (catalog.length === 0) sendNative({ action: "getCatalog" });
+        }
+        if (page === "install") { renderInstallList(); updateProgressBar(); }
         if (page === "recovery") loadSnapshots();
         if (page === "summary") renderSummary();
     }
@@ -820,17 +877,23 @@
             if (!groups[cat]) return;
             html += '<div class="card-section"><div class="card-section__title">' + esc(getCategoryLabel(cat)) + '</div>';
             groups[cat].forEach(function (p) {
+                var isInstalled = installedPackages.has(p.id);
                 var sel = selectedPackages.has(p.id);
                 var iconSvg = window.LazyEnvIcons.getIcon(p.id || p.name, p.category);
-                html += '<div class="card-row card-row--selectable' + (sel ? ' card-row--selected' : '') + '" data-id="' + esc(p.id) + '">' +
-                    '<div class="card-row__check">' +
-                    '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>' +
-                    '</div>' +
+                var cls = isInstalled ? ' card-row--installed' : ' card-row--selectable';
+                if (sel) cls += ' card-row--selected';
+                html += '<div class="card-row' + cls + '" data-id="' + esc(p.id) + '">' +
+                    '<div class="card-row__check">' + (isInstalled
+                        ? '<svg width="16" height="16" viewBox="0 0 16 16" fill="var(--status-success)"><path d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2zm10.03 4.97a.75.75 0 0 1 .011 1.05l-3.992 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.75.75 0 0 1 1.08-.022z"/></svg>'
+                        : '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>'
+                    ) + '</div>' +
                     '<div class="card-row__icon">' + iconSvg + '</div>' +
                     '<div class="card-row__body">' +
                     '<div class="card-row__title">' + esc(p.name) + '</div>' +
                     '<div class="card-row__subtitle">' + esc(p.description) + '</div>' +
-                    '</div></div>';
+                    '</div>' +
+                    (isInstalled ? '<span class="badge badge--success" style="margin-right:8px">' + esc(t("packages.installed")) + '</span>' : '') +
+                    '</div>';
             });
             html += '</div>';
         });
@@ -858,7 +921,9 @@
     });
 
     document.getElementById("btnSelectAll").addEventListener("click", function () {
-        catalog.forEach(function (p) { selectedPackages.add(p.id); });
+        catalog.forEach(function (p) {
+            if (!installedPackages.has(p.id)) selectedPackages.add(p.id);
+        });
         renderCatalog(document.getElementById("pkgSearch").value);
         updatePkgCount();
     });
@@ -881,15 +946,27 @@
     function startInstall() {
         installResults.clear();
         installLogs.clear();
-        installTotal = selectedPackages.size;
-        installCurrent = 0;
+
+        // Split into to-install and already-installed
+        var toInstall = [];
         selectedPackages.forEach(function (id) {
-            installResults.set(id, { status: "pending", message: t("install.waiting"), command: "", output: "" });
+            if (installedPackages.has(id)) {
+                installResults.set(id, { status: "skipped", message: t("packages.alreadyInstalled"), command: "", output: "" });
+            } else {
+                toInstall.push(id);
+                installResults.set(id, { status: "pending", message: t("install.waiting"), command: "", output: "" });
+            }
             installLogs.set(id, []);
         });
+
+        installTotal = toInstall.length;
+        installCurrent = 0;
         renderInstallList();
         updateProgressBar();
-        sendNative({ action: "install", packages: Array.from(selectedPackages) });
+
+        if (toInstall.length > 0) {
+            sendNative({ action: "install", packages: toInstall });
+        }
     }
 
     function renderInstallList() {
@@ -998,9 +1075,16 @@
     }
 
     function updateProgressBar() {
+        var wrap = document.getElementById("installProgressWrap");
         var fill = document.getElementById("installProgressFill");
         var text = document.getElementById("installProgress");
         var pct = document.getElementById("installPercent");
+
+        if (installResults.size === 0) {
+            if (wrap) wrap.classList.add("hidden");
+            return;
+        }
+        if (wrap) wrap.classList.remove("hidden");
 
         var done = 0;
         var failed = 0;
@@ -1205,6 +1289,7 @@
     // -----------------------------------------------------------------------
     // Init
     // -----------------------------------------------------------------------
+    loadPersistedState();
     navigateTo("home");
 
 })();
