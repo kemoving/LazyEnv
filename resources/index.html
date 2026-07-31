@@ -232,6 +232,14 @@
 
                 <div id="packageList"></div>
 
+                <!-- Custom Install Location -->
+                <div class="install-location mt-md" id="installLocationSection">
+                    <label class="install-location__label" for="txtInstallLocation" data-i18n="packages.installLocation">Install Location</label>
+                    <input type="text" id="txtInstallLocation" class="install-location__input" data-i18n-placeholder="packages.installLocationPlaceholder" placeholder="e.g. D:\Tools" spellcheck="false" />
+                    <p class="install-location__hint" data-i18n="packages.locationHint">Tip: Use a non-system drive to keep C: clean.</p>
+                    <p class="install-location__error" id="installLocationError" data-i18n="packages.noDriveSpaceAfterColon" style="display:none">Please include a drive letter and path.</p>
+                </div>
+
                 <div class="mt-lg flex-between">
                     <span id="pkgSelectedCount" class="text-secondary"></span>
                     <button class="btn btn--accent" id="btnStartInstall" data-i18n="packages.startInstall">Start Installation</button>

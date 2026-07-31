@@ -85,10 +85,14 @@ public:
     static bool isPackageInstalled(const std::string& packageId);
 
     // Install a single package via winget.
-    InstallResult installPackage(const PackageInfo& pkg);
+    // If installLocation is non-empty, winget --location is used to control
+    // where the package is installed.
+    InstallResult installPackage(const PackageInfo& pkg,
+                                 const std::string& installLocation = "");
 
     // Install a batch of packages sequentially.
-    std::vector<InstallResult> installBatch(const std::vector<PackageInfo>& packages);
+    std::vector<InstallResult> installBatch(const std::vector<PackageInfo>& packages,
+                                           const std::string& installLocation = "");
 
     // Append a directory to the user PATH (registry-level, persistent).
     // Returns true if the path was added (or already present).

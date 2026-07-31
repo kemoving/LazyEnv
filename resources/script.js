@@ -46,6 +46,7 @@
     var isMaximized = false;
     var isAdmin = true; // default true until proven otherwise — avoids false-positives
     var installedPackages = new Set(); // IDs of packages already installed on the system
+    var currentInstallLocation = ""; // custom install location set by user
 
     // Settings state
     var envVarScope = "user";   // "user" or "system"
@@ -350,6 +351,7 @@
             var pkgs = obj.packages || [];
             pkgs.forEach(function (id, i) {
                 var cmd = "winget install --id " + id + " --exact --silent --accept-package-agreements --accept-source-agreements";
+                if (obj.installLocation) cmd += ' --location "' + obj.installLocation + '"';
                 setTimeout(function () {
                     handleNative({ action: "installProgress", packageId: id, status: "running", message: "Installing...", command: cmd, current: i, total: pkgs.length });
                 }, 300 + i * 2500);
@@ -378,6 +380,7 @@
         if (obj.action === "retryInstall") {
             var rid = obj.packageId;
             var rcmd = "winget install --id " + rid + " --exact --silent --accept-package-agreements --accept-source-agreements";
+            if (obj.installLocation) rcmd += ' --location "' + obj.installLocation + '"';
             setTimeout(function () { handleNative({ action: "installProgress", packageId: rid, status: "running", message: "Retrying...", command: rcmd }); }, 200);
             setTimeout(function () { handleNative({ action: "installProgress", packageId: rid, status: "success", message: "Done", command: rcmd, output: "", exitCode: 0 }); }, 2000);
         }
@@ -1102,6 +1105,26 @@
         installResults.clear();
         installLogs.clear();
 
+        // Read and validate custom install location
+        var locInput = document.getElementById("txtInstallLocation");
+        var locError = document.getElementById("installLocationError");
+        var rawLoc = (locInput.value || "").trim();
+        currentInstallLocation = "";
+
+        if (rawLoc) {
+            // Basic validation: must contain a drive letter followed by colon and backslash
+            if (!/^[A-Za-z]:\\/.test(rawLoc)) {
+                locError.style.display = "block";
+                locInput.focus();
+                return;
+            }
+            locError.style.display = "none";
+            currentInstallLocation = rawLoc;
+        } else {
+            locError.style.display = "none";
+            currentInstallLocation = "";
+        }
+
         // Split into to-install and already-installed
         var toInstall = [];
         selectedPackages.forEach(function (id) {
@@ -1120,7 +1143,7 @@
         updateProgressBar();
 
         if (toInstall.length > 0) {
-            sendNative({ action: "install", packages: toInstall });
+            sendNative({ action: "install", packages: toInstall, installLocation: currentInstallLocation });
         }
     }
 
@@ -1204,7 +1227,7 @@
                 installResults.set(pkgId, { status: "pending", message: t("install.retrying"), command: "", output: "" });
                 installLogs.set(pkgId, []);
                 renderInstallList();
-                sendNative({ action: "retryInstall", packageId: pkgId });
+                sendNative({ action: "retryInstall", packageId: pkgId, installLocation: currentInstallLocation });
             });
         });
 

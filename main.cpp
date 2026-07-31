@@ -537,10 +537,11 @@ std::string handleWebMessage(const std::string& message) {
     // ------ Install packages (async, with streaming log) ------
     if (action == "install") {
         auto ids = extractJsonArray(message, "packages");
+        std::string installLocation = extractJsonValue(message, "installLocation");
         auto catalog = lazyenv::getDefaultCatalog();
         std::string snapId = g_rollback.createSnapshot("Pre-install snapshot");
 
-        launchThreadSafe([ids, catalog, snapId]() {
+        launchThreadSafe([ids, installLocation, catalog, snapId]() {
             try {
             int total = static_cast<int>(ids.size());
             int current = 0;
@@ -560,6 +561,11 @@ std::string handleWebMessage(const std::string& message) {
                     "winget install --id {} --exact --silent "
                     "--accept-package-agreements --accept-source-agreements",
                     pkg.id);
+
+                // Append custom install location if specified
+                if (!installLocation.empty()) {
+                    cmdLine += std::format(" --location \"{}\"", installLocation);
+                }
 
                 // Send "running" status
                 {
@@ -592,8 +598,12 @@ std::string handleWebMessage(const std::string& message) {
                 std::string statusStr;
                 if (exitCode == 0) {
                     statusStr = "success";
-                    if (pkg.addToPath && !pkg.defaultPath.empty())
-                        lazyenv::Installer::addToUserPath(pkg.defaultPath);
+                    if (pkg.addToPath) {
+                        if (!installLocation.empty())
+                            lazyenv::Installer::addToUserPath(installLocation);
+                        else if (!pkg.defaultPath.empty())
+                            lazyenv::Installer::addToUserPath(pkg.defaultPath);
+                    }
                 } else if (fullOutput.find("already installed") != std::string::npos ||
                            fullOutput.find("No available upgrade") != std::string::npos) {
                     statusStr = "skipped";
@@ -646,9 +656,10 @@ std::string handleWebMessage(const std::string& message) {
     // ------ Retry single package (also streaming) ------
     if (action == "retryInstall") {
         std::string id = extractJsonValue(message, "packageId");
+        std::string installLocation = extractJsonValue(message, "installLocation");
         auto catalog = lazyenv::getDefaultCatalog();
 
-        launchThreadSafe([id, catalog]() {
+        launchThreadSafe([id, installLocation, catalog]() {
             try {
             lazyenv::PackageInfo pkg;
             for (auto& p : catalog) {
@@ -663,6 +674,11 @@ std::string handleWebMessage(const std::string& message) {
                 "winget install --id {} --exact --silent "
                 "--accept-package-agreements --accept-source-agreements",
                 pkg.id);
+
+            // Append custom install location if specified
+            if (!installLocation.empty()) {
+                cmdLine += std::format(" --location \"{}\"", installLocation);
+            }
 
             {
                 std::string m = std::format(
@@ -689,6 +705,8 @@ std::string handleWebMessage(const std::string& message) {
             std::string statusStr;
             if (exitCode == 0) {
                 statusStr = "success";
+                if (!installLocation.empty())
+                    lazyenv::Installer::addToUserPath(installLocation);
             } else if (fullOutput.find("already installed") != std::string::npos ||
                        fullOutput.find("No available upgrade") != std::string::npos) {
                 statusStr = "skipped";

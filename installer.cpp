@@ -64,14 +64,15 @@ bool Installer::isPackageInstalled(const std::string& packageId) {
 // ---------------------------------------------------------------------------
 // Single package install
 // ---------------------------------------------------------------------------
-InstallResult Installer::installPackage(const PackageInfo& pkg) {
+InstallResult Installer::installPackage(const PackageInfo& pkg,
+                                       const std::string& installLocation) {
     InstallResult result;
     result.packageId = pkg.id;
     result.status    = InstallStatus::Running;
 
     if (progressCb_)
         progressCb_(pkg.id, InstallStatus::Running,
-                    "Installing " + pkg.displayName + "...");
+                    std::string("Installing ") + pkg.displayName + "...");
 
     // Build winget command
     std::string cmd = std::format(
@@ -79,14 +80,25 @@ InstallResult Installer::installPackage(const PackageInfo& pkg) {
         "--accept-package-agreements --accept-source-agreements",
         pkg.id);
 
+    // Append custom install location if specified
+    if (!installLocation.empty()) {
+        cmd += std::format(" --location \"{}\"", installLocation);
+    }
+
     result.exitCode = runCommand(cmd, result.output, 600000); // 10 min timeout
 
     if (result.exitCode == 0) {
         result.status = InstallStatus::Success;
 
-        // Add to PATH if requested
-        if (pkg.addToPath && !pkg.defaultPath.empty()) {
-            addToUserPath(pkg.defaultPath);
+        // Add to PATH if requested.
+        // When a custom installLocation is provided, use it as the PATH entry
+        // (winget --location may not exactly match the package's defaultPath).
+        if (pkg.addToPath) {
+            if (!installLocation.empty()) {
+                addToUserPath(installLocation);
+            } else if (!pkg.defaultPath.empty()) {
+                addToUserPath(pkg.defaultPath);
+            }
         }
 
         if (progressCb_)
@@ -115,12 +127,13 @@ InstallResult Installer::installPackage(const PackageInfo& pkg) {
 // Batch install
 // ---------------------------------------------------------------------------
 std::vector<InstallResult> Installer::installBatch(
-    const std::vector<PackageInfo>& packages) {
+    const std::vector<PackageInfo>& packages,
+    const std::string& installLocation) {
 
     std::vector<InstallResult> results;
     results.reserve(packages.size());
     for (auto& pkg : packages) {
-        results.push_back(installPackage(pkg));
+        results.push_back(installPackage(pkg, installLocation));
     }
     return results;
 }

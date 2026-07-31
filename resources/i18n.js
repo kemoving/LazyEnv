@@ -141,6 +141,10 @@
             "packages.selectedCount":           "{0} selected",
             "packages.installed":               "Installed",
             "packages.alreadyInstalled":        "Already installed on system",
+            "packages.installLocation":         "Install Location (leave empty for default)",
+            "packages.installLocationPlaceholder": "e.g. D:\\Tools",
+            "packages.locationHint":            "Tip: Use a non-system drive (e.g. D:\\) to keep C: clean.",
+            "packages.noDriveSpaceAfterColon":  "Please include a drive letter and path (e.g. D:\\MyApps).",
 
             // Install
             "install.title":                    "Installation",
@@ -331,6 +335,10 @@
             "packages.selectedCount":           "\u5df2\u9009\u62e9 {0} \u4e2a",
             "packages.installed":               "\u5df2\u5b89\u88c5",
             "packages.alreadyInstalled":        "\u7cfb\u7edf\u4e2d\u5df2\u5b89\u88c5",
+            "packages.installLocation":         "\u5b89\u88c5\u8def\u5f84\uff08\u7559\u7a7a\u5219\u4f7f\u7528\u9ed8\u8ba4\u8def\u5f84\uff09",
+            "packages.installLocationPlaceholder": "\u4f8b\u5982 D:\\Tools",
+            "packages.locationHint":            "\u63d0\u793a\uff1a\u4f7f\u7528\u975e\u7cfb\u7edf\u76d8\uff08\u5982 D:\uff09\u53ef\u4fdd\u6301 C: \u5e72\u51c0\u3002",
+            "packages.noDriveSpaceAfterColon":  "\u8bf7\u8f93\u5165\u76d8\u7b26\u548c\u8def\u5f84\uff08\u4f8b\u5982 D:\\MyApps\uff09\u3002",
 
             // Install
             "install.title":                    "\u5b89\u88c5",
