@@ -1,23 +1,33 @@
-name: Build LazyEnv (Windows exe)
+name: Build & Release
 
 on:
   push:
     branches: ["main"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   BUILD_TYPE: Release
+  ARTIFACT_NAME: LazyEnv-win-x64
+  PACKAGE_NAME: LazyEnv
 
 jobs:
-  build-win-x64:
+  # ------------------------------------------------------------------
+  # Build: compile the Windows x64 executable (shared by CI & Release)
+  # ------------------------------------------------------------------
+  build:
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
@@ -33,11 +43,122 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      - name: Upload artifact
+      - name: Upload artifact (CI)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
-          name: LazyEnv-win-x64
+          name: ${{env.ARTIFACT_NAME}}
           path: |
-            build/LazyEnv.exe
+            build/${{env.PACKAGE_NAME}}.exe
             build/resources/
           if-no-files-found: error
+
+      - name: Package release artifact (zip)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $dest = "release"
+          New-Item -ItemType Directory -Force -Path $dest
+          Copy-Item "build/${{env.PACKAGE_NAME}}.exe" -Destination "$dest/"
+          Copy-Item "build/resources" -Destination "$dest/resources" -Recurse
+          Compress-Archive -Path "$dest/*" -DestinationPath "${{env.PACKAGE_NAME}}.zip"
+
+      - name: Upload artifact (release build)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{env.ARTIFACT_NAME}}
+          path: ${{env.PACKAGE_NAME}}.zip
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # Release: auto-generate changelog + create GitHub Release on tag
+  # ------------------------------------------------------------------
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{env.ARTIFACT_NAME}}
+
+      - name: Generate release changelog
+        id: changelog
+        shell: bash
+        run: |
+          TAG="${{github.ref_name}}"
+          # Find the previous tag for range-based changelog
+          PREV_TAG=$(git tag --sort=-v:refname | grep -A1 "^${TAG}$" | tail -1 || true)
+
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+
+          echo "## What's Changed" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+
+          # Group commits by Conventional Commits type
+          declare -A SECTIONS
+          SECTIONS["feat"]="### Features"
+          SECTIONS["fix"]="### Bug Fixes"
+          SECTIONS["perf"]="### Performance"
+          SECTIONS["refactor"]="### Refactoring"
+          SECTIONS["docs"]="### Documentation"
+          SECTIONS["chore"]="### Chores"
+          SECTIONS["style"]="### Style"
+          SECTIONS["test"]="### Tests"
+          SECTIONS["ci"]="### CI / Build"
+          SECTIONS["_other"]="### Other Changes"
+
+          declare -A has_section
+
+          while IFS= read -r line; do
+            COMMIT_HASH=$(echo "$line" | cut -d' ' -f1)
+            COMMIT_MSG=$(echo "$line" | cut -d' ' -f2-)
+
+            # Extract type: "type:" or "type(scope):"
+            if echo "$COMMIT_MSG" | grep -qE '^[a-zA-Z]+(\([^)]+\))?:'; then
+              TYPE=$(echo "$COMMIT_MSG" | sed -E 's/^([a-zA-Z]+)(\([^)]+\))?:.*/\1/')
+              BODY=$(echo "$COMMIT_MSG" | sed -E 's/^[a-zA-Z]+(\([^)]+\))?: //')
+            else
+              TYPE="_other"
+              BODY="$COMMIT_MSG"
+            fi
+
+            HEADER="${SECTIONS[$TYPE]:-${SECTIONS["_other"]}}"
+            if [ -z "${has_section[$HEADER]}" ]; then
+              echo "$HEADER" >> CHANGELOG.md
+              echo "" >> CHANGELOG.md
+              has_section[$HEADER]=1
+            fi
+
+            # Link to commit (only works on GitHub)
+            echo "- ${BODY} (\`${COMMIT_HASH}\`)" >> CHANGELOG.md
+
+          done < <(git log --no-merges --format="%h %s" ${RANGE})
+
+          echo "" >> CHANGELOG.md
+          echo "**Full Changelog**: https://github.com/${{github.repository}}/compare/${PREV_TAG:-main}...${TAG}" >> CHANGELOG.md
+
+          cat CHANGELOG.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{github.ref_name}}
+          name: ${{github.ref_name}}
+          body_path: CHANGELOG.md
+          files: ${{env.PACKAGE_NAME}}.zip
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}

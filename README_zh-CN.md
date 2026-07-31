@@ -124,6 +124,17 @@ cmake --build build --config Release
 # 资源文件会自动复制到 build/Release/resources/
 ```
 
+### 发布 (通过 GitHub Actions)
+
+推送版本 tag 即可触发自动 GitHub Release，并生成分类 Changelog：
+
+```powershell
+git tag v0.6.0
+git push origin v0.6.0
+```
+
+CI 会自动编译、打包 zip、从提交历史生成分类 Changelog，并创建 GitHub Release。
+
 ---
 
 ## 使用方法

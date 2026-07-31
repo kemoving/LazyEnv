@@ -123,6 +123,17 @@ cmake --build build --config Release
 # Resources are automatically copied to build/Release/resources/
 ```
 
+### Release (via GitHub Actions)
+
+Push a version tag to trigger an automated GitHub Release with changelog:
+
+```powershell
+git tag v0.6.0
+git push origin v0.6.0
+```
+
+The CI will build the executable, package it into a zip, generate a categorized changelog from commit history, and create a GitHub Release.
+
 ### Icon
 
 The resource file references `resources/lazyenv.ico`. You can generate one or provide your own 256x256 ICO file. To build without an icon, comment out the `IDI_APPICON ICON` line in `LazyEnv.rc`.
