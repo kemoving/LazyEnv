@@ -114,6 +114,8 @@
             "settings.deleteFailed":            "Failed to delete variable: {0}",
             "settings.confirmDeleteTitle":      "Confirm Delete",
             "settings.confirmDelete":           "Delete environment variable \"{0}\"?",
+            "settings.adminWarningShort":       "You are running without administrator privileges — system variables are read-only.",
+            "settings.adminRequired":           "Administrator privileges required to modify system variables.",
 
             // System Check
             "syscheck.title":                   "System Check",
@@ -283,6 +285,8 @@
             "settings.deleteFailed":            "\u5220\u9664\u53d8\u91cf\u5931\u8d25: {0}",
             "settings.confirmDeleteTitle":      "\u786e\u8ba4\u5220\u9664",
             "settings.confirmDelete":           "\u5220\u9664\u73af\u5883\u53d8\u91cf \"{0}\"\uff1f",
+            "settings.adminWarningShort":       "\u60a8\u6b63\u5728\u4ee5\u975e\u7ba1\u7406\u5458\u6743\u9650\u8fd0\u884c \u2014 \u7cfb\u7edf\u53d8\u91cf\u4ec5\u53ef\u67e5\u770b\uff0c\u4e0d\u53ef\u4fee\u6539\u3002",
+            "settings.adminRequired":           "\u4fee\u6539\u7cfb\u7edf\u53d8\u91cf\u9700\u8981\u7ba1\u7406\u5458\u6743\u9650\u3002",
 
             // System Check
             "syscheck.title":                   "\u7cfb\u7edf\u68c0\u67e5",

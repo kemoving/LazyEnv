@@ -44,6 +44,7 @@
     var installTotal = 0;
     var installCurrent = 0;
     var isMaximized = false;
+    var isAdmin = true; // default true until proven otherwise — avoids false-positives
     var installedPackages = new Set(); // IDs of packages already installed on the system
 
     // Settings state
@@ -77,7 +78,16 @@
         switch (d.action) {
             case "environmentsDetected":
                 detectedEnvironments = d.environments || [];
-                renderEnvironments();
+                if (currentPage === "home") {
+                    renderEnvironments(document.getElementById("homeSearch") ? document.getElementById("homeSearch").value : "");
+                    // Now that CLI detection is done (no subprocess contention), refresh winget list
+                    sendNative({ action: "checkInstalled" });
+                }
+                break;
+
+            case "adminStatus":
+                isAdmin = d.isAdmin === true;
+                updateAdminWarning();
                 break;
 
             case "probeResult":
@@ -91,6 +101,9 @@
             case "catalogData":
                 catalog = d.packages || [];
                 renderCatalog();
+                if (currentPage === "home") {
+                    renderEnvironments(document.getElementById("homeSearch").value);
+                }
                 break;
 
             case "installStarted":
@@ -136,6 +149,9 @@
                 persistInstalledPackages();
                 if (currentPage === "packages" && catalog.length > 0) {
                     renderCatalog(document.getElementById("pkgSearch").value);
+                }
+                if (currentPage === "home") {
+                    renderEnvironments(document.getElementById("homeSearch").value);
                 }
                 break;
 
@@ -193,6 +209,7 @@
             case "envVarList":
                 envVarCache = d.variables || [];
                 renderEnvVarTable();
+                updateAdminWarning();
                 break;
 
             case "envVarWriteResult":
@@ -322,6 +339,9 @@
         if (obj.action === "deleteSnapshot") {
             setTimeout(function () { handleNative({ action: "deleteResult", success: true, snapshotId: obj.snapshotId || "" }); }, 200);
         }
+        if (obj.action === "adminCheck") {
+            setTimeout(function () { handleNative({ action: "adminStatus", isAdmin: false }); }, 100);
+        }
         if (obj.action === "listEnvVars") {
             setTimeout(function () {
                 handleNative({
@@ -345,7 +365,7 @@
         if (obj.action === "checkInstalled") {
             // Mock: simulate some common packages already installed on the system
             setTimeout(function () {
-                handleNative({ action: "installedList", packageIds: ["Git.Git", "OpenJS.NodeJS.LTS"] });
+                handleNative({ action: "installedList", packageIds: ["Git.Git", "OpenJS.NodeJS.LTS", "WinSCP.WinSCP"] });
             }, 200);
         }
     }
@@ -400,12 +420,21 @@
             item.classList.toggle("sidebar__item--active", item.dataset.page === page);
         });
 
-        if (page === "home") sendNative({ action: "detectEnvironments" });
-        if (page === "settings") loadEnvVars();
+        if (page === "home") {
+            // if (catalog.length === 0) sendNative({ action: "getCatalog" });
+            // Immediately render with cached data, then start CLI detection
+           if(detectedEnvironments.length === 0){
+                document.getElementById("envList").innerHTML = '<div class="empty-state">' + t("env.scanning") + '</div>';
+                sendNative({ action: "detectEnvironments" });
+           }else{
+                renderEnvironments(document.getElementById("homeSearch").value);
+           }            
+        }
+        if (page === "settings") { loadEnvVars(); updateAdminWarning(); }
         if (page === "syscheck") initCheck();
         if (page === "packages") {
-            sendNative({ action: "checkInstalled" });
             if (catalog.length === 0) sendNative({ action: "getCatalog" });
+            sendNative({ action: "checkInstalled" });
         }
         if (page === "install") { renderInstallList(); updateProgressBar(); }
         if (page === "recovery") loadSnapshots();
@@ -444,6 +473,7 @@
         renderEnvironments(document.getElementById("homeSearch").value);
         if (currentPage === "syscheck") renderChecks();
         if (catalog.length > 0) renderCatalog(document.getElementById("pkgSearch").value);
+        updateAdminWarning();
         updatePkgCount();
         if (installResults.size > 0) {
             renderInstallList();
@@ -501,6 +531,30 @@
                 seen.add(e.command.toLowerCase());
                 all.push(e);
             }
+        });
+        // Merge winget-installed packages not already in the environment lists
+        installedPackages.forEach(function (pkgId) {
+            // Look up display name from catalog first
+            var catPkg = catalog.find(function (c) { return c.id === pkgId; });
+            var displayName = catPkg ? catPkg.name : pkgId;
+
+            // Dedup: check if already shown via command or display name
+            var alreadyShown = Array.from(all).some(function (e) {
+                return (e.command && e.command.toLowerCase() === pkgId.toLowerCase()) ||
+                       (e.name && e.name.toLowerCase() === displayName.toLowerCase());
+            });
+            if (alreadyShown) return;
+
+            var displayCategory = catPkg ? (catPkg.category || "gui") : "gui";
+            var displayDesc = catPkg ? (catPkg.description || "") : "";
+
+            all.push({
+                name: displayName,
+                command: pkgId,
+                version: displayDesc,
+                category: displayCategory,
+                source: "winget"
+            });
         });
         return all;
     }
@@ -634,6 +688,24 @@
     // -----------------------------------------------------------------------
     // Settings: Environment Variable Editor
     // -----------------------------------------------------------------------
+    function updateAdminWarning() {
+        var banner = document.getElementById("adminWarning");
+        var addBtn = document.getElementById("btnAddEnvVar");
+        if (!banner) return;
+
+        if (isAdmin) {
+            banner.classList.add("hidden");
+            if (addBtn) addBtn.style.display = "";
+        } else {
+            banner.classList.remove("hidden");
+            // Disable "Add Variable" button on system scope
+            if (envVarScope === "system" && addBtn) addBtn.style.display = "none";
+            else if (addBtn) addBtn.style.display = "";
+        }
+        // Re-render table to reflect disabled edit/delete on sys vars
+        if (currentPage === "settings" && envVarCache.length > 0) renderEnvVarTable();
+    }
+
     function loadEnvVars() {
         sendNative({ action: "listEnvVars", scope: envVarScope });
     }
@@ -647,6 +719,7 @@
             t.classList.toggle("tab--active", t.dataset.scope === envVarScope);
         });
         loadEnvVars();
+        updateAdminWarning();
     });
 
     function renderEnvVarTable() {
@@ -666,8 +739,9 @@
                 '</td></tr>';
             return;
         }
-
+       
         var html = "";
+        var sysLock = !isAdmin && envVarScope === "system";
         vars.forEach(function (v) {
             var isPath = v.name.toUpperCase() === "PATH" || v.name.toUpperCase() === "PATHEXT";
             var displayVal = v.value;
@@ -676,17 +750,21 @@
             }
             html += '<tr data-name="' + esc(v.name) + '">' +
                 '<td class="envvar-name">' + esc(v.name) +
-                (v.type === "REG_EXPAND_SZ" ? ' <span class="envvar-type">EXP</span>' : '') +
+                (v.type === "REG_EXPAND_SZ" ? ' <span class="envvar-type-badge" title="可展开变量 — 值含 %VAR% 引用，Windows 读取时自动展开">EXP</span>' : '') +
                 '</td>' +
                 '<td class="envvar-value">' + esc(displayVal) + '</td>' +
                 '<td class="envvar-actions">' +
-                '<button class="btn btn--sm btn-edit-var" title="' + esc(t("settings.edit")) + '">' +
-                '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5L13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175l-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>' +
-                '</button>' +
-                '<button class="btn btn--sm btn--danger btn-delete-var" title="' + esc(t("settings.delete")) + '">' +
-                '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H5.5l1-1h3l1 1H13a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>' +
-                '</button>' +
-                '</td></tr>';
+                (sysLock
+                    ? '<span class="envvar-lock" title="' + esc(t("settings.adminRequired")) + '">' +
+                      '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>' +
+                      '</span>'
+                    : '<button class="btn btn--sm btn-edit-var" title="' + esc(t("settings.edit")) + '">' +
+                      '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5L13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175l-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>' +
+                      '</button>' +
+                      '<button class="btn btn--sm btn--danger btn-delete-var" title="' + esc(t("settings.delete")) + '">' +
+                      '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H5.5l1-1h3l1 1H13a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>' +
+                      '</button>')
+                + '</td></tr>';
         });
 
         tbody.innerHTML = html;
@@ -1290,6 +1368,7 @@
     // Init
     // -----------------------------------------------------------------------
     loadPersistedState();
+    sendNative({ action: "adminCheck" });
     navigateTo("home");
 
 })();

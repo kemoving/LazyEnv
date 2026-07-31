@@ -355,6 +355,12 @@ static void reportEnvDetectionSEHError() {
 std::string handleWebMessage(const std::string& message) {
     std::string action = extractJsonValue(message, "action");
 
+    // ------ Admin check ------
+    if (action == "adminCheck") {
+        bool isAdmin = IsUserAnAdmin();
+        return std::format("{{\"action\":\"adminStatus\",\"isAdmin\":{}}}", isAdmin ? "true" : "false");
+    }
+
     // ------ Window controls ------
     if (action == "windowMinimize") {
         ShowWindow(g_mainWindow, SW_MINIMIZE);
@@ -972,6 +978,10 @@ std::string handleWebMessage(const std::string& message) {
         uint32_t regType = REG_SZ;
         if (typeStr == "REG_EXPAND_SZ") regType = REG_EXPAND_SZ;
 
+        // Auto-snapshot before modifying — safe rollback
+        g_rollback.createSnapshot(std::format("Auto-save before modifying {} ({})",
+            name, sys ? "system" : "user"));
+
         bool ok = lazyenv::RollbackManager::writeEnvVariable(name, value, regType, sys);
         if (ok) lazyenv::RollbackManager::broadcastEnvironmentChange();
 
@@ -986,25 +996,11 @@ std::string handleWebMessage(const std::string& message) {
         std::string scope = extractJsonValue(message, "scope");
         bool sys = (scope == "system");
 
-        HKEY root = sys ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-        const wchar_t* subKey = sys
-            ? L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"
-            : L"Environment";
+        // Auto-snapshot before deleting — safe rollback
+        g_rollback.createSnapshot(std::format("Auto-save before deleting {} ({})",
+            name, sys ? "system" : "user"));
 
-        // Convert name to wide
-        int wl = MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, nullptr, 0);
-        std::wstring wname(wl - 1, L'\0');
-        MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, wname.data(), wl);
-
-        HKEY hKey = nullptr;
-        LONG rc = RegOpenKeyExW(root, subKey, 0, KEY_SET_VALUE, &hKey);
-        bool ok = false;
-        if (rc == ERROR_SUCCESS) {
-            rc = RegDeleteValueW(hKey, wname.c_str());
-            ok = (rc == ERROR_SUCCESS);
-            RegCloseKey(hKey);
-        }
-
+        bool ok = lazyenv::RollbackManager::deleteEnvVariable(name, sys);
         if (ok) lazyenv::RollbackManager::broadcastEnvironmentChange();
 
         return std::format(

@@ -329,6 +329,22 @@ bool RollbackManager::writeEnvVariable(const std::string& name,
     return rc == ERROR_SUCCESS;
 }
 
+bool RollbackManager::deleteEnvVariable(const std::string& name, bool system) {
+    HKEY root = system ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
+    const wchar_t* subkey = system
+        ? L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"
+        : L"Environment";
+
+    HKEY hKey = nullptr;
+    LONG rc = RegOpenKeyExW(root, subkey, 0, KEY_SET_VALUE, &hKey);
+    if (rc != ERROR_SUCCESS) return false;
+
+    std::wstring wname = utf8ToWide(name);
+    rc = RegDeleteValueW(hKey, wname.c_str());
+    RegCloseKey(hKey);
+    return rc == ERROR_SUCCESS;
+}
+
 void RollbackManager::broadcastEnvironmentChange() {
     DWORD_PTR result = 0;
     SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,

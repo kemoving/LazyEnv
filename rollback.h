@@ -89,6 +89,9 @@ public:
                                  uint32_t type,
                                  bool system);
 
+    // Delete a single environment variable from the registry.
+    static bool deleteEnvVariable(const std::string& name, bool system);
+
     // Broadcast WM_SETTINGCHANGE so running processes pick up changes.
     static void broadcastEnvironmentChange();
 
