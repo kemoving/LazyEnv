@@ -68,6 +68,11 @@ public:
     // Resize the WebView to fill the parent window.
     void resize();
 
+    // Force the WebView2 compositor to rebuild its rendering surface.
+    // Use after window state transitions (maximize/restore) where
+    // put_Bounds alone does not trigger a full compositor resize.
+    void forceRefresh();
+
     // Deliver a JSON message directly to the web layer.
     // MUST be called on the UI thread only (called from WndProc).
     void deliverMessage(const std::string& json);

@@ -59,6 +59,7 @@ static lazyenv::RollbackManager g_rollback;
 // g_msgMutex is no longer needed; postMessage is now thread-safe via message queue
 static HWND                     g_mainWindow = nullptr;
 static bool                     g_isMaximized = false;
+static bool                     g_needsForceRefresh = false;
 
 // ---------------------------------------------------------------------------
 // JSON helpers
@@ -371,14 +372,17 @@ std::string handleWebMessage(const std::string& message) {
         return "";
     }
     if (action == "windowMaximize") {
+        // Update g_isMaximized upfront so WM_NCCALCSIZE (which fires
+        // before WM_SIZE) uses the correct value for work-area inset.
+        g_isMaximized = !g_isMaximized;
+        g_needsForceRefresh = true;
         if (g_isMaximized) {
-            ShowWindow(g_mainWindow, SW_RESTORE);
-            g_isMaximized = false;
-        } else {
             ShowWindow(g_mainWindow, SW_MAXIMIZE);
-            g_isMaximized = true;
+        } else {
+            ShowWindow(g_mainWindow, SW_RESTORE);
         }
-        return std::format("{{\"action\":\"windowState\",\"maximized\":{}}}", g_isMaximized ? "true" : "false");
+        // WM_SIZE will post the windowState message to JS.
+        return "";
     }
     if (action == "windowClose") {
         PostMessage(g_mainWindow, WM_CLOSE, 0, 0);
@@ -1184,6 +1188,14 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_SIZE: {
         g_isMaximized = (wParam == SIZE_MAXIMIZED);
         g_webview.resize();
+
+        // When triggered from our maximize/restore handler,
+        // force the compositor to rebuild its rendering surface.
+        if (g_needsForceRefresh) {
+            g_webview.forceRefresh();
+            g_needsForceRefresh = false;
+        }
+
         if (g_webview.getController()) {
             int cw = LOWORD(lParam);  // client area width
             int ch = HIWORD(lParam);  // client area height

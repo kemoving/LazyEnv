@@ -52,8 +52,9 @@
     var envVarCache = [];       // [{name, value, type}]
 
     // -----------------------------------------------------------------------
-    // Viewport fix — C++ resize() injects a reflow script via ExecuteScript
-    // after put_Bounds. This JS-side code is the fallback.
+    // Viewport fix — C++ sends windowState with native client-area dimensions
+    // after put_Bounds and forceRefresh (if needed). ResizeObserver / resize
+    // serve as a fallback for incremental drag-resize.
     // -----------------------------------------------------------------------
 
     function setViewportVars(w, h) {

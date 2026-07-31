@@ -254,22 +254,12 @@ void WebViewHost::resize() {
 
     controller_->NotifyParentWindowPositionChanged();
     controller_->put_Bounds(bounds);
+}
 
-    // Inject a JS reflow script so the compositor syncs its viewport metrics.
-    // put_Bounds is synchronous but the JS innerHeight update is deferred;
-    // this script runs after the bounds are processed and forces the update.
-    if (webview_) {
-        webview_->ExecuteScript(
-            L"(function(){"
-            L"var w=(window.innerWidth||document.documentElement.clientWidth)*0.01;"
-            L"var h=(window.innerHeight||document.documentElement.clientHeight)*0.01;"
-            L"document.documentElement.style.setProperty('--vw',w+'px');"
-            L"document.documentElement.style.setProperty('--vh',h+'px');"
-            L"var app=document.querySelector('.app');"
-            L"if(app){app.style.display='none';void app.offsetHeight;app.style.display='';}"
-            L"})()",
-            nullptr);
-    }
+void WebViewHost::forceRefresh() {
+    if (!controller_) return;
+    controller_->put_IsVisible(FALSE);
+    controller_->put_IsVisible(TRUE);
 }
 
 void WebViewHost::deliverMessage(const std::string& json) {
