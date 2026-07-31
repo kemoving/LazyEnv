@@ -34,7 +34,6 @@
 }
 
 :root {
-    transition: --vw 0.15s ease-out, --vh 0.15s ease-out;
     /* Surface & Background */
     --bg-solid:             #202020;
     --bg-mica:              #1c1c1c;

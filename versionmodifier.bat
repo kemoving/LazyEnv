@@ -1,4 +1,4 @@
-$old = "0.1.0"; $new = "0.2.0"
+$old = "0.5.0"; $new = "0.5.0"
 $oldRC = $old -replace '\.', ','
 $newRC = $new -replace '\.', ','
 foreach ($f in @("CMakeLists.txt","LazyEnv.rc","README.md","resources\index.html","resources\script.js")) {
