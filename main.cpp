@@ -52,8 +52,6 @@
 // ---------------------------------------------------------------------------
 static constexpr wchar_t kWindowClass[] = L"LazyEnvMainWindow";
 static constexpr wchar_t kWindowTitle[] = L"LazyEnv";
-static constexpr int     kDefaultWidth  = 1100;
-static constexpr int     kDefaultHeight = 750;
 
 static lazyenv::WebViewHost     g_webview;
 static lazyenv::Installer       g_installer;
@@ -1378,18 +1376,22 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     wc.hIconSm        = LoadIconW(hInstance, L"IDI_APPICON");
     RegisterClassExW(&wc);
 
-    // Create window (centered)
-    int screenW = GetSystemMetrics(SM_CXSCREEN);
-    int screenH = GetSystemMetrics(SM_CYSCREEN);
-    int x = (screenW - kDefaultWidth) / 2;
-    int y = (screenH - kDefaultHeight) / 2;
+    // Create window (centered, 2/3 of work area)
+    RECT workArea;
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
+    int workW = workArea.right - workArea.left;
+    int workH = workArea.bottom - workArea.top;
+    int winW  = workW * 2 / 3;
+    int winH  = workH * 2 / 3;
+    int x = workArea.left + (workW - winW) / 2;
+    int y = workArea.top  + (workH - winH) / 2;
 
     g_mainWindow = CreateWindowExW(
         0,
         kWindowClass,
         kWindowTitle,
         WS_POPUP | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU,
-        x, y, kDefaultWidth, kDefaultHeight,
+        x, y, winW, winH,
         nullptr, nullptr, hInstance, nullptr);
 
     if (!g_mainWindow) {
