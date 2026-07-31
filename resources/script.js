@@ -475,14 +475,15 @@
         });
 
         if (page === "home") {
-            // if (catalog.length === 0) sendNative({ action: "getCatalog" });
+            // Need catalog to map winget IDs to display names/categories and deduplicate
+            if (catalog.length === 0) sendNative({ action: "getCatalog" });
             // Immediately render with cached data, then start CLI detection
-           if(detectedEnvironments.length === 0){
+            if (detectedEnvironments.length === 0) {
                 document.getElementById("envList").innerHTML = '<div class="empty-state">' + t("env.scanning") + '</div>';
                 sendNative({ action: "detectEnvironments" });
-           }else{
+            } else {
                 renderEnvironments(document.getElementById("homeSearch").value);
-           }            
+            }
         }
         if (page === "settings") { loadEnvVars(); updateAdminWarning(); }
         if (page === "syscheck") initCheck();
@@ -592,10 +593,20 @@
             var catPkg = catalog.find(function (c) { return c.id === pkgId; });
             var displayName = catPkg ? catPkg.name : pkgId;
 
-            // Dedup: check if already shown via command or display name
+            // Dedup: check if already shown via command or display name.
+            // Also match the last segment of the winget ID (e.g. "Git.Git" -> "git")
+            // so CLI-detected tools are not duplicated when catalog isn't loaded yet.
+            var pkgIdLower = pkgId.toLowerCase();
+            var pkgBase = pkgIdLower;
+            var lastDot = pkgIdLower.lastIndexOf(".");
+            if (lastDot >= 0) pkgBase = pkgIdLower.substring(lastDot + 1);
+            var displayNameLower = displayName.toLowerCase();
             var alreadyShown = Array.from(all).some(function (e) {
-                return (e.command && e.command.toLowerCase() === pkgId.toLowerCase()) ||
-                       (e.name && e.name.toLowerCase() === displayName.toLowerCase());
+                var eCmd = (e.command || "").toLowerCase();
+                var eName = (e.name || "").toLowerCase();
+                return eCmd === pkgIdLower ||
+                       eCmd === pkgBase ||
+                       eName === displayNameLower;
             });
             if (alreadyShown) return;
 
