@@ -1381,8 +1381,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
     int workW = workArea.right - workArea.left;
     int workH = workArea.bottom - workArea.top;
-    int winW  = workW * 2 / 3;
-    int winH  = workH * 2 / 3;
+    int winW  = workW * 3 / 5;
+    int winH  = workH * 4 / 5;
     int x = workArea.left + (workW - winW) / 2;
     int y = workArea.top  + (workH - winH) / 2;
 
