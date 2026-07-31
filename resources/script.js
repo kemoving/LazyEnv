@@ -141,7 +141,14 @@
                 catalog = d.packages || [];
                 renderCatalog();
                 if (currentPage === "home") {
-                    renderEnvironments(document.getElementById("homeSearch").value);
+                    if (detectedEnvironments.length === 0) {
+                        // Catalog just loaded — now safe to detect environments
+                        document.getElementById("envList").innerHTML = '<div class="empty-state">' + t("env.scanning") + '</div>';
+                        sendNative({ action: "detectEnvironments" });
+                    } else {
+                        // Re-render with catalog now available for proper winget mapping
+                        renderEnvironments(document.getElementById("homeSearch").value);
+                    }
                 }
                 break;
 
@@ -475,10 +482,11 @@
         });
 
         if (page === "home") {
-            // Need catalog to map winget IDs to display names/categories and deduplicate
-            if (catalog.length === 0) sendNative({ action: "getCatalog" });
-            // Immediately render with cached data, then start CLI detection
-            if (detectedEnvironments.length === 0) {
+            if (catalog.length === 0) {
+                // Fetch catalog first; catalogData handler will chain detectEnvironments
+                document.getElementById("envList").innerHTML = '<div class="empty-state">' + t("env.scanning") + '</div>';
+                sendNative({ action: "getCatalog" });
+            } else if (detectedEnvironments.length === 0) {
                 document.getElementById("envList").innerHTML = '<div class="empty-state">' + t("env.scanning") + '</div>';
                 sendNative({ action: "detectEnvironments" });
             } else {
