@@ -26,6 +26,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <unordered_set>
 #include <cstdint>
 #include <filesystem>
 
@@ -38,6 +39,19 @@ struct SnapshotEntry {
     std::string name;
     std::string value;
     uint32_t    type;   // REG_SZ, REG_EXPAND_SZ, etc.
+};
+
+// ----------------------------------------------------------------------------
+// Diff entry — 快照与当前注册表的差异项
+// ----------------------------------------------------------------------------
+struct DiffEntry {
+    std::string name;
+    std::string currentValue;   // 当前注册表中的值（空 = 注册表中不存在）
+    std::string snapshotValue;  // 快照中的值（空 = 快照中不存在，将被删除）
+    uint32_t    currentType = 0;
+    uint32_t    snapshotType = 0;
+    std::string changeType;     // "added" / "modified" / "removed"
+    bool        system = false; // true = 系统作用域
 };
 
 struct Snapshot {
@@ -71,7 +85,14 @@ public:
     // Incremental restore: only update variables that differ from the
     // snapshot.  Variables added after snapshot are removed; deleted
     // ones are restored; unchanged ones are left untouched.
-    bool restoreSnapshotIncremental(const std::string& snapshotId);
+    // If `names` is non-empty, only those specific variables are restored.
+    bool restoreSnapshotIncremental(const std::string& snapshotId,
+        const std::vector<std::string>& names = {});
+
+    // Compare a snapshot with the current registry and return all
+    // differences (added / modified / removed variables).
+    // Used by the UI to let users pick what to restore.
+    std::vector<DiffEntry> diffSnapshot(const std::string& snapshotId) const;
 
     // Delete a snapshot file.
     bool deleteSnapshot(const std::string& snapshotId);
@@ -112,8 +133,11 @@ private:
 
     // Incremental restore: compare snapshot entries with current registry,
     // only update variables that differ.
+    // If `filter` is non-null and non-empty, only those entries are processed;
+    // deletions of non-snapshot entries are also skipped when filtered.
     static bool restoreRegistryKeyIncremental(
-        const std::vector<SnapshotEntry>& entries, bool system);
+        const std::vector<SnapshotEntry>& entries, bool system,
+        const std::unordered_set<std::string>* filter = nullptr);
 
     // Serialize / deserialize snapshot to/from JSON file.
     bool saveSnapshot(const Snapshot& snap) const;

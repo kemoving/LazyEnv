@@ -173,6 +173,10 @@
                 else showToast(t("recovery.restoreFailed"), "error");
                 break;
 
+            case "snapshotDiff":
+                showDiffDialog(d.snapshotId, d.diffs || []);
+                break;
+
             case "deleteResult":
                 loadSnapshots();
                 break;
@@ -1229,7 +1233,7 @@
                     '<p style="font-size:12px;color:var(--text-secondary)">' + esc(t("recovery.restoreModeHint")) + '</p>',
                     [
                         { text: t("recovery.btnRestoreFull"), cls: "btn--accent", action: function () { sendNative({ action: "restoreSnapshot", snapshotId: id, mode: "full" }); } },
-                        { text: t("recovery.btnRestoreIncremental"), cls: "", action: function () { sendNative({ action: "restoreSnapshot", snapshotId: id, mode: "incremental" }); } },
+                        { text: t("recovery.btnRestoreIncremental"), cls: "", action: function () { sendNative({ action: "diffSnapshot", snapshotId: id }); } },
                         { text: t("dialog.cancel"), cls: "" }
                     ]
                 );
@@ -1341,6 +1345,104 @@
         });
 
         overlay.classList.add("dialog-overlay--visible");
+    }
+
+    // -----------------------------------------------------------------------
+    // Diff dialog — 增量恢复前的差异对比选择
+    // -----------------------------------------------------------------------
+    function showDiffDialog(snapshotId, diffs) {
+        if (!diffs || diffs.length === 0) {
+            showToast(t("recovery.noDiff") || "No differences found. Nothing to restore.", "info");
+            return;
+        }
+
+        // Group diffs by scope
+        var userDiffs = diffs.filter(function (d) { return !d.system; });
+        var sysDiffs  = diffs.filter(function (d) { return  d.system; });
+
+        var changeTypeLabels = {
+            "added":    t("recovery.badgeAdded")    || "New",
+            "modified": t("recovery.badgeModified") || "Changed",
+            "removed":  t("recovery.badgeRemoved")  || "Removed"
+        };
+
+        var html = '';
+        html += '<div class="diff-dialog">';
+        html += '<p class="diff-hint">' + (t("recovery.diffHint") || "Select variables to restore from the snapshot. Unchanged variables are not listed.") + '</p>';
+
+        function renderScope(diffList, label) {
+            if (diffList.length === 0) return '';
+            var out = '';
+            out += '<div class="diff-scope">';
+            out += '<div class="diff-scope-title">' + esc(label) + ' (' + diffList.length + ')</div>';
+            diffList.forEach(function (d) {
+                var badgeCls = "diff-badge diff-badge--" + d.changeType;
+                var badgeText = changeTypeLabels[d.changeType] || d.changeType;
+                out += '<label class="diff-item">';
+                out += '<input type="checkbox" class="diff-check" checked value="' + esc(d.name) + '|' + (d.system ? '1' : '0') + '">';
+                out += '<span class="diff-name">' + esc(d.name) + '</span>';
+                out += '<span class="' + badgeCls + '">' + esc(badgeText) + '</span>';
+                out += '<span class="diff-values">';
+                if (d.changeType === 'removed') {
+                    out += '<span class="diff-old">' + esc(d.currentValue || '') + '</span>';
+                    out += '<span class="diff-arrow">WILL BE REMOVED</span>';
+                } else {
+                    if (d.changeType === 'modified') {
+                        out += '<span class="diff-old">' + esc(d.currentValue || '(empty)') + '</span>';
+                    }
+                    out += '<span class="diff-arrow">→</span>';
+                    out += '<span class="diff-new">' + esc(d.snapshotValue || '') + '</span>';
+                }
+                out += '</span></label>';
+            });
+            out += '</div>';
+            return out;
+        }
+
+        html += renderScope(userDiffs,  t("settings.scopeUser")  || "User");
+        html += renderScope(sysDiffs,   t("settings.scopeSystem")|| "System");
+        html += '</div>';
+
+        showDialogRaw(
+            t("recovery.diffTitle") || "Changed Variables",
+            html,
+            [
+                {
+                    text: t("recovery.diffSelectAll") || "Select All",
+                    cls: "btn--ghost",
+                    action: function () {
+                        var checks = document.querySelectorAll(".diff-check");
+                        checks.forEach(function (c) { c.checked = true; });
+                        return false; // keep dialog open
+                    }
+                },
+                {
+                    text: t("recovery.diffRestoreSelected") || "Restore Selected",
+                    cls: "btn--accent",
+                    action: function () {
+                        var checks = document.querySelectorAll(".diff-check:checked");
+                        var names = [];
+                        checks.forEach(function (c) {
+                            // value format: "name|system" where system is "1" or "0"
+                            var parts = c.value.split("|");
+                            var prefix = (parts[1] === "1") ? "system:" : "user:";
+                            names.push(prefix + parts[0]);
+                        });
+                        if (names.length === 0) {
+                            showToast(t("recovery.diffNoneSelected") || "Please select at least one variable.", "warn");
+                            return false; // keep dialog open
+                        }
+                        sendNative({
+                            action: "restoreSnapshot",
+                            snapshotId: snapshotId,
+                            mode: "incremental",
+                            names: names
+                        });
+                    }
+                },
+                { text: t("dialog.cancel"), cls: "" }
+            ]
+        );
     }
 
     document.getElementById("dialogOverlay").addEventListener("click", function (e) {

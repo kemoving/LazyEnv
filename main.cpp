@@ -735,13 +735,36 @@ std::string handleWebMessage(const std::string& message) {
         return os.str();
     }
 
+    // ------ Diff snapshot (compare snapshot with current registry) ------
+    if (action == "diffSnapshot") {
+        std::string id = extractJsonValue(message, "snapshotId");
+        auto diffs = g_rollback.diffSnapshot(id);
+        std::string json;
+        json += "{\"action\":\"snapshotDiff\",\"snapshotId\":\"" + jsonEscape(id) + "\",\"diffs\":[";
+        for (size_t i = 0; i < diffs.size(); ++i) {
+            if (i > 0) json += ",";
+            auto& d = diffs[i];
+            json += std::format(
+                "{{\"name\":\"{}\",\"currentValue\":\"{}\",\"snapshotValue\":\"{}\","
+                "\"currentType\":{},\"snapshotType\":{},\"changeType\":\"{}\",\"system\":{}}}",
+                jsonEscape(d.name), jsonEscape(d.currentValue),
+                jsonEscape(d.snapshotValue),
+                d.currentType, d.snapshotType,
+                jsonEscape(d.changeType),
+                d.system ? "true" : "false");
+        }
+        json += "]}";
+        return json;
+    }
+
     // ------ Restore snapshot (full or incremental) ------
     if (action == "restoreSnapshot") {
         std::string id   = extractJsonValue(message, "snapshotId");
-        std::string mode = extractJsonValue(message, "mode"); // "full" (default) or "incremental"
+        std::string mode = extractJsonValue(message, "mode");
         bool ok = false;
         if (mode == "incremental") {
-            ok = g_rollback.restoreSnapshotIncremental(id);
+            std::vector<std::string> names = extractJsonArray(message, "names");
+            ok = g_rollback.restoreSnapshotIncremental(id, names);
         } else {
             ok = g_rollback.restoreSnapshot(id);
         }

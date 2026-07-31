@@ -32,6 +32,7 @@
 #include <stdexcept>
 #include <format>
 #include <unordered_map>
+#include <unordered_set>
 
 // ---------------------------------------------------------------------------
 // Minimal JSON helpers (no external dependency)
@@ -282,10 +283,13 @@ bool RollbackManager::restoreRegistryKey(
 }
 
 // ---------------------------------------------------------------------------
-// Incremental registry restore
+// Incremental registry restore (optionally filtered by name set)
+// If `filter` is non-empty, only entries whose names are in the set will be
+// restored; all other entries (including deletions) are skipped.
 // ---------------------------------------------------------------------------
 bool RollbackManager::restoreRegistryKeyIncremental(
-    const std::vector<SnapshotEntry>& entries, bool system) {
+    const std::vector<SnapshotEntry>& entries, bool system,
+    const std::unordered_set<std::string>* filter) {
 
     HKEY root = system ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
     const wchar_t* subkey = system
@@ -325,16 +329,25 @@ bool RollbackManager::restoreRegistryKeyIncremental(
     for (const auto& e : entries)
         snapMap.emplace(e.name, std::make_pair(e.value, e.type));
 
-    // 3) Delete registry values that exist now but are NOT in the snapshot
+    bool hasFilter = (filter != nullptr && !filter->empty());
+
+    // 3) Delete registry values that exist now but are NOT in the snapshot.
+    //    When filtered, only delete entries whose names are in the filter.
     for (const auto& kv : current) {
         if (snapMap.find(kv.first) == snapMap.end()) {
-            std::wstring wname = utf8ToWide(kv.first);
-            RegDeleteValueW(hKey, wname.c_str());
+            if (!hasFilter || filter->count(kv.first)) {
+                std::wstring wname = utf8ToWide(kv.first);
+                RegDeleteValueW(hKey, wname.c_str());
+            }
         }
     }
 
-    // 4) Write snapshot entries that differ from current (or are new)
+    // 4) Write snapshot entries that differ from current (or are new).
+    //    When filtered, only write entries whose names are in the filter.
     for (const auto& entry : entries) {
+        if (hasFilter && !filter->count(entry.name))
+            continue;
+
         auto it = current.find(entry.name);
         if (it == current.end() ||
             it->second.first != entry.value ||
@@ -353,21 +366,121 @@ bool RollbackManager::restoreRegistryKeyIncremental(
     return true;
 }
 
-bool RollbackManager::restoreSnapshotIncremental(const std::string& snapshotId) {
+bool RollbackManager::restoreSnapshotIncremental(const std::string& snapshotId,
+    const std::vector<std::string>& names) {
+
     auto path = storageDir_ / (snapshotId + ".json");
     if (!std::filesystem::exists(path)) return false;
 
     Snapshot snap = loadSnapshot(path);
 
-    // Restore user environment — only changed vars
-    if (!restoreRegistryKeyIncremental(snap.user_env, false))
-        return false;
+    // Parse scope-prefixed names: "user:PATH", "system:JAVA_HOME"
+    std::unordered_set<std::string> userFilter, sysFilter;
+    for (const auto& n : names) {
+        if (n.starts_with("user:"))
+            userFilter.insert(n.substr(5));
+        else if (n.starts_with("system:"))
+            sysFilter.insert(n.substr(7));
+        else
+            userFilter.insert(n);   // bare name defaults to user scope
+    }
 
-    // Attempt system environment (may fail without admin)
-    restoreRegistryKeyIncremental(snap.system_env, true);
+    bool noFilter = names.empty();
+
+    // Restore user scope: if names is empty, restore ALL diffs;
+    // if names contains user-prefixed entries, restore with filter;
+    // otherwise skip user scope entirely.
+    if (noFilter || !userFilter.empty()) {
+        if (!restoreRegistryKeyIncremental(snap.user_env, false,
+             noFilter ? nullptr : &userFilter))
+            return false;
+    }
+
+    // Restore system scope: same logic
+    if (noFilter || !sysFilter.empty()) {
+        restoreRegistryKeyIncremental(snap.system_env, true,
+            noFilter ? nullptr : &sysFilter);
+    }
 
     broadcastEnvironmentChange();
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot diff — compare snapshot with current registry
+// ---------------------------------------------------------------------------
+std::vector<DiffEntry> RollbackManager::diffSnapshot(
+    const std::string& snapshotId) const {
+
+    auto path = storageDir_ / (snapshotId + ".json");
+    if (!std::filesystem::exists(path)) return {};
+
+    Snapshot snap = loadSnapshot(path);
+
+    // Capture current state
+    std::vector<SnapshotEntry> curUser   = captureRegistryKey(false);
+    std::vector<SnapshotEntry> curSystem = captureRegistryKey(true);
+
+    std::vector<DiffEntry> result;
+
+    // Helper: process one scope (user/system)
+    auto diffScope = [&](const std::vector<SnapshotEntry>& snapEntries,
+                         const std::vector<SnapshotEntry>& curEntries,
+                         bool sys) {
+        // Build maps for fast lookup
+        std::unordered_map<std::string, std::pair<std::string, uint32_t>> curMap;
+        for (const auto& e : curEntries)
+            curMap.emplace(e.name, std::make_pair(e.value, e.type));
+
+        std::unordered_map<std::string, std::pair<std::string, uint32_t>> snapMap;
+        for (const auto& e : snapEntries)
+            snapMap.emplace(e.name, std::make_pair(e.value, e.type));
+
+        // 1) Entries in snapshot but not in current → "added"
+        //    Entries in both but differ → "modified"
+        for (const auto& e : snapEntries) {
+            auto it = curMap.find(e.name);
+            DiffEntry de;
+            de.name          = e.name;
+            de.snapshotValue = e.value;
+            de.snapshotType  = e.type;
+            de.system        = sys;
+
+            if (it == curMap.end()) {
+                de.changeType   = "added";
+                de.currentValue = "";
+                de.currentType  = 0;
+            } else if (it->second.first != e.value ||
+                       it->second.second != e.type) {
+                de.changeType   = "modified";
+                de.currentValue = it->second.first;
+                de.currentType  = it->second.second;
+            } else {
+                continue; // unchanged — don't include in diff
+            }
+            result.push_back(std::move(de));
+        }
+
+        // 2) Entries in current but not in snapshot → "removed"
+        for (const auto& e : curEntries) {
+            if (snapMap.find(e.name) == snapMap.end()) {
+                DiffEntry de;
+                de.name          = e.name;
+                de.currentValue  = e.value;
+                de.currentType   = e.type;
+                de.snapshotValue = "";
+                de.snapshotType  = 0;
+                de.changeType    = "removed";
+                de.system        = sys;
+                result.push_back(std::move(de));
+            }
+        }
+    };
+
+    diffScope(snap.user_env,   curUser,   false);
+    diffScope(snap.system_env, curSystem, true);
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
