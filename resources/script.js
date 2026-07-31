@@ -229,6 +229,11 @@
                     showToast(t("settings.deleteFailed", d.message || ""), "error");
                 }
                 break;
+
+            // Catch-all for native-side errors (e.g. exceptions caught by try-catch)
+            case "error":
+                showToast(d.message || "An unexpected error occurred.", "error");
+                break;
         }
     }
 
@@ -1218,12 +1223,14 @@
             if (!id) return;
             row.querySelector(".btn-restore").addEventListener("click", function (e) {
                 e.stopPropagation();
-                showDialog(
+                showDialogRaw(
                     t("recovery.confirmRestoreTitle"),
-                    t("recovery.confirmRestore"),
+                    '<p style="margin-bottom:6px">' + esc(t("recovery.confirmRestore")) + '</p>' +
+                    '<p style="font-size:12px;color:var(--text-secondary)">' + esc(t("recovery.restoreModeHint")) + '</p>',
                     [
-                        { text: t("dialog.cancel"), cls: "" },
-                        { text: t("recovery.btnRestore"), cls: "btn--accent", action: function () { sendNative({ action: "restoreSnapshot", snapshotId: id }); } }
+                        { text: t("recovery.btnRestoreFull"), cls: "btn--accent", action: function () { sendNative({ action: "restoreSnapshot", snapshotId: id, mode: "full" }); } },
+                        { text: t("recovery.btnRestoreIncremental"), cls: "", action: function () { sendNative({ action: "restoreSnapshot", snapshotId: id, mode: "incremental" }); } },
+                        { text: t("dialog.cancel"), cls: "" }
                     ]
                 );
             });

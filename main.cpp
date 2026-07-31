@@ -42,6 +42,7 @@
 #include <thread>
 #include <format>
 #include <vector>
+#include <stdexcept>
 #include <algorithm>
 #include <functional>
 #include <memory>
@@ -356,8 +357,12 @@ static void reportEnvDetectionSEHError() {
 std::string handleWebMessage(const std::string& message) {
     std::string action = extractJsonValue(message, "action");
 
-    // ------ Admin check ------
-    if (action == "adminCheck") {
+    // Top-level safety net: catch any exception that escapes from
+    // snapshot/registry/filesystem operations, return a structured
+    // error so the UI can report the problem instead of crashing.
+    try {
+        // ------ Admin check ------
+        if (action == "adminCheck") {
         bool isAdmin = IsUserAnAdmin();
         return std::format("{{\"action\":\"adminStatus\",\"isAdmin\":{}}}", isAdmin ? "true" : "false");
     }
@@ -730,10 +735,16 @@ std::string handleWebMessage(const std::string& message) {
         return os.str();
     }
 
-    // ------ Restore snapshot ------
+    // ------ Restore snapshot (full or incremental) ------
     if (action == "restoreSnapshot") {
-        std::string id = extractJsonValue(message, "snapshotId");
-        bool ok = g_rollback.restoreSnapshot(id);
+        std::string id   = extractJsonValue(message, "snapshotId");
+        std::string mode = extractJsonValue(message, "mode"); // "full" (default) or "incremental"
+        bool ok = false;
+        if (mode == "incremental") {
+            ok = g_rollback.restoreSnapshotIncremental(id);
+        } else {
+            ok = g_rollback.restoreSnapshot(id);
+        }
         return std::format("{{\"action\":\"restoreResult\",\"success\":{},\"snapshotId\":\"{}\"}}",
                            ok ? "true" : "false", jsonEscape(id));
     }
@@ -976,19 +987,33 @@ std::string handleWebMessage(const std::string& message) {
         std::string scope = extractJsonValue(message, "scope");
         bool sys = (scope == "system");
 
+        // Defensive: reject empty variable name
+        if (name.empty()) {
+            return "{\"action\":\"envVarWriteResult\",\"success\":false,"
+                   "\"name\":\"\",\"message\":\"Variable name cannot be empty\"}";
+        }
+
         uint32_t regType = REG_SZ;
         if (typeStr == "REG_EXPAND_SZ") regType = REG_EXPAND_SZ;
 
         // Auto-snapshot before modifying — safe rollback
-        g_rollback.createSnapshot(std::format("Auto-save before modifying {} ({})",
-            name, sys ? "system" : "user"));
+        // Skip if non-admin touching system scope (write will fail anyway)
+        if (!sys || IsUserAnAdmin()) {
+            g_rollback.createSnapshot(std::format("Auto-save before modifying {} ({})",
+                name, sys ? "system" : "user"));
+        }
 
         bool ok = lazyenv::RollbackManager::writeEnvVariable(name, value, regType, sys);
-        if (ok) lazyenv::RollbackManager::broadcastEnvironmentChange();
+        if (ok) {
+            lazyenv::RollbackManager::broadcastEnvironmentChange();
+        }
 
         return std::format(
-            "{{\"action\":\"envVarWriteResult\",\"success\":{},\"name\":\"{}\"}}",
-            ok ? "true" : "false", jsonEscape(name));
+            "{{\"action\":\"envVarWriteResult\",\"success\":{},\"name\":\"{}\","
+            "\"message\":\"{}\"}}",
+            ok ? "true" : "false", jsonEscape(name),
+            ok ? "" : jsonEscape("Failed to write environment variable. "
+                                 "Ensure you have sufficient privileges."));
     }
 
     // ------ Delete environment variable (for Settings page) ------
@@ -997,16 +1022,30 @@ std::string handleWebMessage(const std::string& message) {
         std::string scope = extractJsonValue(message, "scope");
         bool sys = (scope == "system");
 
+        // Defensive: reject empty variable name
+        if (name.empty()) {
+            return "{\"action\":\"envVarDeleteResult\",\"success\":false,"
+                   "\"name\":\"\",\"message\":\"Variable name cannot be empty\"}";
+        }
+
         // Auto-snapshot before deleting — safe rollback
-        g_rollback.createSnapshot(std::format("Auto-save before deleting {} ({})",
-            name, sys ? "system" : "user"));
+        // Skip if non-admin touching system scope (delete will fail anyway)
+        if (!sys || IsUserAnAdmin()) {
+            g_rollback.createSnapshot(std::format("Auto-save before deleting {} ({})",
+                name, sys ? "system" : "user"));
+        }
 
         bool ok = lazyenv::RollbackManager::deleteEnvVariable(name, sys);
-        if (ok) lazyenv::RollbackManager::broadcastEnvironmentChange();
+        if (ok) {
+            lazyenv::RollbackManager::broadcastEnvironmentChange();
+        }
 
         return std::format(
-            "{{\"action\":\"envVarDeleteResult\",\"success\":{},\"name\":\"{}\"}}",
-            ok ? "true" : "false", jsonEscape(name));
+            "{{\"action\":\"envVarDeleteResult\",\"success\":{},\"name\":\"{}\","
+            "\"message\":\"{}\"}}",
+            ok ? "true" : "false", jsonEscape(name),
+            ok ? "" : jsonEscape("Failed to delete environment variable. "
+                                 "Ensure you have sufficient privileges."));
     }
 
     // ------ Read env var ------
@@ -1020,6 +1059,13 @@ std::string handleWebMessage(const std::string& message) {
     }
 
     return "{\"action\":\"error\",\"message\":\"Unknown action\"}";
+
+    } catch (const std::exception& e) {
+        return std::format("{{\"action\":\"error\",\"message\":\"{}\"}}",
+                           jsonEscape(e.what()));
+    } catch (...) {
+        return "{\"action\":\"error\",\"message\":\"Unexpected internal error\"}";
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <format>
+#include <unordered_map>
 
 // ---------------------------------------------------------------------------
 // Minimal JSON helpers (no external dependency)
@@ -277,6 +278,95 @@ bool RollbackManager::restoreRegistryKey(
     }
 
     RegCloseKey(hKey);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Incremental registry restore
+// ---------------------------------------------------------------------------
+bool RollbackManager::restoreRegistryKeyIncremental(
+    const std::vector<SnapshotEntry>& entries, bool system) {
+
+    HKEY root = system ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
+    const wchar_t* subkey = system
+        ? L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"
+        : L"Environment";
+
+    // 1) Read current registry into a map: name → {value, type}
+    std::unordered_map<std::string, std::pair<std::string, uint32_t>> current;
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(root, subkey, 0, KEY_READ | KEY_SET_VALUE, &hKey) != ERROR_SUCCESS)
+        return false;
+
+    {
+        DWORD index = 0;
+        wchar_t nameBuf[32767];
+        BYTE   dataBuf[32767];
+        while (true) {
+            DWORD nameLen = sizeof(nameBuf) / sizeof(wchar_t);
+            DWORD dataLen = sizeof(dataBuf);
+            DWORD type    = 0;
+            if (RegEnumValueW(hKey, index, nameBuf, &nameLen, nullptr, &type, dataBuf, &dataLen) != ERROR_SUCCESS)
+                break;
+            std::string key = wideToUtf8(std::wstring(nameBuf, nameLen));
+            std::string val;
+            if (type == REG_SZ || type == REG_EXPAND_SZ) {
+                size_t wc = dataLen / sizeof(wchar_t);
+                if (wc > 0 && reinterpret_cast<wchar_t*>(dataBuf)[wc - 1] == L'\0') --wc;
+                val = wideToUtf8(std::wstring(reinterpret_cast<wchar_t*>(dataBuf), wc));
+            }
+            current.emplace(std::move(key), std::make_pair(std::move(val), type));
+            ++index;
+        }
+    }
+
+    // 2) Build snapshot map
+    std::unordered_map<std::string, std::pair<std::string, uint32_t>> snapMap;
+    for (const auto& e : entries)
+        snapMap.emplace(e.name, std::make_pair(e.value, e.type));
+
+    // 3) Delete registry values that exist now but are NOT in the snapshot
+    for (const auto& kv : current) {
+        if (snapMap.find(kv.first) == snapMap.end()) {
+            std::wstring wname = utf8ToWide(kv.first);
+            RegDeleteValueW(hKey, wname.c_str());
+        }
+    }
+
+    // 4) Write snapshot entries that differ from current (or are new)
+    for (const auto& entry : entries) {
+        auto it = current.find(entry.name);
+        if (it == current.end() ||
+            it->second.first != entry.value ||
+            it->second.second != entry.type) {
+            std::wstring wname = utf8ToWide(entry.name);
+            if (entry.type == REG_SZ || entry.type == REG_EXPAND_SZ) {
+                std::wstring wval = utf8ToWide(entry.value);
+                RegSetValueExW(hKey, wname.c_str(), 0, entry.type,
+                               reinterpret_cast<const BYTE*>(wval.data()),
+                               static_cast<DWORD>((wval.size() + 1) * sizeof(wchar_t)));
+            }
+        }
+    }
+
+    RegCloseKey(hKey);
+    return true;
+}
+
+bool RollbackManager::restoreSnapshotIncremental(const std::string& snapshotId) {
+    auto path = storageDir_ / (snapshotId + ".json");
+    if (!std::filesystem::exists(path)) return false;
+
+    Snapshot snap = loadSnapshot(path);
+
+    // Restore user environment — only changed vars
+    if (!restoreRegistryKeyIncremental(snap.user_env, false))
+        return false;
+
+    // Attempt system environment (may fail without admin)
+    restoreRegistryKeyIncremental(snap.system_env, true);
+
+    broadcastEnvironmentChange();
     return true;
 }
 

@@ -68,6 +68,11 @@ public:
     // Returns true on success.
     bool restoreSnapshot(const std::string& snapshotId);
 
+    // Incremental restore: only update variables that differ from the
+    // snapshot.  Variables added after snapshot are removed; deleted
+    // ones are restored; unchanged ones are left untouched.
+    bool restoreSnapshotIncremental(const std::string& snapshotId);
+
     // Delete a snapshot file.
     bool deleteSnapshot(const std::string& snapshotId);
 
@@ -104,6 +109,11 @@ private:
     // Restore all variables from a snapshot entry list to a registry key.
     static bool restoreRegistryKey(const std::vector<SnapshotEntry>& entries,
                                    bool system);
+
+    // Incremental restore: compare snapshot entries with current registry,
+    // only update variables that differ.
+    static bool restoreRegistryKeyIncremental(
+        const std::vector<SnapshotEntry>& entries, bool system);
 
     // Serialize / deserialize snapshot to/from JSON file.
     bool saveSnapshot(const Snapshot& snap) const;
