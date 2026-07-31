@@ -139,7 +139,7 @@ a:hover { text-decoration: underline; }
    App Layout
    ============================================================================ */
 
-.app { display: flex; height: 100vh; padding-top: var(--titlebar-height); }
+.app { display: flex; height: calc(var(--vh, 1vh) * 100); padding-top: var(--titlebar-height); }
 
 /* ============================================================================
    Sidebar - Win11 Settings Navigation
@@ -1007,6 +1007,30 @@ textarea.input {
     border-radius: var(--radius-md); overflow: hidden;
     box-shadow: var(--shadow-card);
 }
+
+/* Fixed layout prevents the action column from being clipped when a
+   vertical scrollbar reduces the available width (system vars usually
+   have more rows and trigger scrolling). */
+.envvar-table-wrap .data-table { table-layout: fixed; }
+
+.envvar-table-wrap .data-table th:nth-child(1),
+.envvar-table-wrap .data-table td:nth-child(1),
+.envvar-table-wrap .data-table .envvar-name { width: 32%; }
+
+.envvar-table-wrap .data-table th:nth-child(2),
+.envvar-table-wrap .data-table td:nth-child(2),
+.envvar-table-wrap .data-table .envvar-value { width: auto; }
+
+.envvar-table-wrap .data-table th:nth-child(3),
+.envvar-table-wrap .data-table td:nth-child(3),
+.envvar-table-wrap .data-table .envvar-actions {
+    width: 110px; min-width: 110px;
+    text-align: right; white-space: nowrap;
+}
+
+.envvar-table-wrap .envvar-actions .btn { margin-left: 6px; }
+.envvar-table-wrap .envvar-actions .btn:first-child { margin-left: 0; }
+.envvar-table-wrap .envvar-actions .envvar-lock { display: inline-flex; }
 
 .envvar-table-wrap .data-table tbody tr { cursor: pointer; }
 

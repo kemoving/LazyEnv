@@ -1185,8 +1185,11 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         g_isMaximized = (wParam == SIZE_MAXIMIZED);
         g_webview.resize();
         if (g_webview.getController()) {
-            std::string stateMsg = std::format("{{\"action\":\"windowState\",\"maximized\":{}}}",
-                                               g_isMaximized ? "true" : "false");
+            int cw = LOWORD(lParam);  // client area width
+            int ch = HIWORD(lParam);  // client area height
+            std::string stateMsg = std::format(
+                "{{\"action\":\"windowState\",\"maximized\":{},\"width\":{},\"height\":{}}}",
+                g_isMaximized ? "true" : "false", cw, ch);
             g_webview.postMessage(stateMsg);
         }
         return 0;

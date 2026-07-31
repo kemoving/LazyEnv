@@ -52,6 +52,36 @@
     var envVarCache = [];       // [{name, value, type}]
 
     // -----------------------------------------------------------------------
+    // Viewport fix — C++ resize() injects a reflow script via ExecuteScript
+    // after put_Bounds. This JS-side code is the fallback.
+    // -----------------------------------------------------------------------
+
+    function setViewportVars(w, h) {
+        document.documentElement.style.setProperty("--vw", (w * 0.01) + "px");
+        document.documentElement.style.setProperty("--vh", (h * 0.01) + "px");
+    }
+
+    function triggerReflow() {
+        var w = window.innerWidth  || document.documentElement.clientWidth;
+        var h = window.innerHeight || document.documentElement.clientHeight;
+        setViewportVars(w, h);
+        forceLayout();
+    }
+
+    function forceLayout() {
+        var app = document.querySelector(".app");
+        if (app) { app.style.display = "none"; void app.offsetHeight; app.style.display = ""; }
+    }
+
+    // Keep ResizeObserver and resize event as fallbacks
+    if (window.ResizeObserver) {
+        new ResizeObserver(triggerReflow).observe(document.documentElement);
+    }
+    window.addEventListener("resize", triggerReflow);
+
+    triggerReflow();
+
+    // -----------------------------------------------------------------------
     // Native bridge
     // -----------------------------------------------------------------------
     function sendNative(obj) {
@@ -198,6 +228,13 @@
             case "windowState":
                 isMaximized = d.maximized;
                 updateMaxBtn();
+                // Use native client-area dimensions — unaffected by
+                // WebView2 viewport caching. Then force a layout pass
+                // without overwriting the native values.
+                if (typeof d.width === "number" && typeof d.height === "number") {
+                    setViewportVars(d.width, d.height);
+                    forceLayout();
+                }
                 break;
 
             case "uninstallResult":

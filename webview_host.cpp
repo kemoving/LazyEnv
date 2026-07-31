@@ -244,8 +244,6 @@ void WebViewHost::resize() {
     GetClientRect(parentHwnd_, &bounds);
 
     // Update WebView2 rasterization scale for the current monitor DPI.
-    // This is required when the window moves between monitors with different
-    // DPIs, or when maximizing/restoring changes the effective DPI.
     UINT dpi = GetDpiForWindow(parentHwnd_);
     if (dpi == 0) dpi = USER_DEFAULT_SCREEN_DPI;
 
@@ -254,11 +252,24 @@ void WebViewHost::resize() {
         controller3->put_RasterizationScale(static_cast<double>(dpi) / USER_DEFAULT_SCREEN_DPI);
     }
 
-    // Notify WebView2 that the parent window moved/resized so it can update
-    // its internal DPI/position tracking before bounds are applied.
     controller_->NotifyParentWindowPositionChanged();
-
     controller_->put_Bounds(bounds);
+
+    // Inject a JS reflow script so the compositor syncs its viewport metrics.
+    // put_Bounds is synchronous but the JS innerHeight update is deferred;
+    // this script runs after the bounds are processed and forces the update.
+    if (webview_) {
+        webview_->ExecuteScript(
+            L"(function(){"
+            L"var w=(window.innerWidth||document.documentElement.clientWidth)*0.01;"
+            L"var h=(window.innerHeight||document.documentElement.clientHeight)*0.01;"
+            L"document.documentElement.style.setProperty('--vw',w+'px');"
+            L"document.documentElement.style.setProperty('--vh',h+'px');"
+            L"var app=document.querySelector('.app');"
+            L"if(app){app.style.display='none';void app.offsetHeight;app.style.display='';}"
+            L"})()",
+            nullptr);
+    }
 }
 
 void WebViewHost::deliverMessage(const std::string& json) {
