@@ -706,7 +706,11 @@
             banner.classList.add("hidden");
             if (addBtn) addBtn.style.display = "";
         } else {
-            banner.classList.remove("hidden");
+            if (envVarScope === "system"){
+               banner.classList.remove("hidden");
+            }else{
+                banner.classList.add("hidden");
+            }
             // Disable "Add Variable" button on system scope
             if (envVarScope === "system" && addBtn) addBtn.style.display = "none";
             else if (addBtn) addBtn.style.display = "";
@@ -1315,16 +1319,22 @@
         showDialogRaw(title, '<p>' + esc(message) + '</p>', buttons);
     }
 
-    function showDialogRaw(title, bodyHtml, buttons) {
+    function showDialogRaw(title, bodyHtml, buttons, dialogClass) {
         var overlay = document.getElementById("dialogOverlay");
+        var dialog = overlay.querySelector(".dialog");
         document.getElementById("dialogTitle").textContent = title;
         document.getElementById("dialogBody").innerHTML = bodyHtml;
+
+        // Toggle dialog width class
+        dialog.classList.remove("dialog--wide");
+        if (dialogClass) dialog.classList.add(dialogClass);
 
         var footer = document.getElementById("dialogFooter");
         footer.innerHTML = "";
         buttons.forEach(function (b) {
             var btn = document.createElement("button");
             btn.className = "btn " + (b.cls || "");
+            if (b.id) btn.id = b.id;
             btn.textContent = b.text;
             btn.addEventListener("click", function () {
                 if (b.action) {
@@ -1361,64 +1371,104 @@
         if (hasDiffs) {
             html += '<p class="diff-hint">' + (t("recovery.diffHint") || "Select variables to restore from the snapshot. Unchanged variables are not listed.") + '</p>';
         } else {
-            html += '<p class="diff-hint" style="text-align:center;padding:32px 0;">' +
-                    (t("recovery.diffEmptyBody") || "Current environment is already identical to the snapshot.") + '</p>';
+            html += '<div class="diff-empty">' +
+                    '<div class="diff-empty-icon">&#x2705;</div>' +
+                    '<div class="diff-empty-title">' + (t("recovery.diffEmptyTitle") || "Restore Snapshot") + '</div>' +
+                    '<div class="diff-empty-body">' + (t("recovery.diffEmptyBody") || "Current environment is already identical to the snapshot.") + '</div>' +
+                    '</div>';
         }
 
         function renderScope(diffList, label) {
             if (diffList.length === 0) return '';
             var out = '';
             out += '<div class="diff-scope">';
-            out += '<div class="diff-scope-title">' + esc(label) + ' (' + diffList.length + ')</div>';
+            out += '<div class="diff-scope-title">' + esc(label) + ' <span class="diff-scope-count">' + diffList.length + '</span></div>';
             diffList.forEach(function (d) {
                 var badgeCls = "diff-badge diff-badge--" + d.changeType;
                 var badgeText = changeTypeLabels[d.changeType] || d.changeType;
+                // Single-line layout: [checkbox] key  old→new  [badge]
                 out += '<label class="diff-item">';
                 out += '<input type="checkbox" class="diff-check" checked value="' + esc(d.name) + '|' + (d.system ? '1' : '0') + '">';
                 out += '<span class="diff-name">' + esc(d.name) + '</span>';
-                out += '<span class="' + badgeCls + '">' + esc(badgeText) + '</span>';
                 out += '<span class="diff-values">';
                 if (d.changeType === 'removed') {
-                    out += '<span class="diff-old">' + esc(d.currentValue || '') + '</span>';
-                    out += '<span class="diff-arrow">' + (t("recovery.willBeRemoved") || "WILL BE REMOVED") + '</span>';
+                    out += '<span class="diff-old diff-old--full">' + esc(d.currentValue || '(empty)') + '</span>';
+                    out += '<span class="diff-arrow">→</span>';
+                    out += '<span class="diff-new diff-new--removed">' + (t("recovery.willBeRemoved") || "WILL BE REMOVED") + '</span>';
                 } else {
                     if (d.changeType === 'modified') {
                         out += '<span class="diff-old">' + esc(d.currentValue || '(empty)') + '</span>';
+                        out += '<span class="diff-arrow">→</span>';
+                    } else {
+                        // added: show arrow before the new value
+                        out += '<span class="diff-arrow">→</span>';
                     }
-                    out += '<span class="diff-arrow">→</span>';
                     out += '<span class="diff-new">' + esc(d.snapshotValue || '') + '</span>';
                 }
-                out += '</span></label>';
+                out += '</span>';
+                out += '<span class="' + badgeCls + '">' + esc(badgeText) + '</span>';
+                out += '</label>';
             });
             out += '</div>';
             return out;
         }
 
-        html += renderScope(userDiffs,  t("settings.scopeUser")  || "User");
-        html += renderScope(sysDiffs,   t("settings.scopeSystem")|| "System");
+        html += renderScope(userDiffs,  t("settings.scopeUser")  || "User Variables");
+        html += renderScope(sysDiffs,   t("settings.scopeSystem")|| "System Variables");
+
         html += '</div>';
+
+        // Toggle state — tracked in closure for button sync
+        var allSelected = true;
+        // Button DOM refs will be stored here for text update
+        var selectAllBtn = null;
+        var selectAllTextSel  = t("recovery.diffSelectAll")   || "Select All";
+        var selectAllTextDesel = t("recovery.diffDeselectAll") || "Deselect All";
+
+        function syncSelectAllBtn() {
+            if (selectAllBtn) {
+                selectAllBtn.textContent = allSelected ? selectAllTextDesel : selectAllTextSel;
+            }
+        }
 
         var buttons = [];
 
+        buttons.push({
+            text: t("recovery.btnRestoreFull") || "Full Restore",
+            cls: "btn--danger btn--left",
+            id: "btnFullRestore",
+            action: function () {
+                showDialogRaw(
+                    t("recovery.confirmRestoreTitle") || "Confirm Full Restore",
+                    '<div class="dialog-warning">' +
+                    '<svg class="dialog-warning__icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>' +
+                    '<div class="dialog-warning__text">' + esc(t("recovery.fullRestoreHint") || "Full Restore will replace ALL current variables with the snapshot values. This cannot be undone.") + '</div>' +
+                    '</div>',
+                    [
+                        { text: t("dialog.cancel"), cls: "", action: function () { showDiffDialog(snapshotId, diffs); return false; } },
+                        { text: t("recovery.btnRestoreFull") || "Full Restore", cls: "btn--danger", action: function () {
+                            sendNative({ action: "restoreSnapshot", snapshotId: snapshotId, mode: "full" });
+                        } }
+                    ]
+                );
+                return false;
+            }
+        });
+
         if (hasDiffs) {
             buttons.push({
-                text: t("recovery.diffSelectAll") || "Select All",
-                cls: "btn--ghost",
+                text: allSelected ? selectAllTextDesel : selectAllTextSel,
+                cls: "btn--secondary",
+                id: "btnToggleAll",
                 action: function () {
                     var checks = document.querySelectorAll(".diff-check");
-                    checks.forEach(function (c) { c.checked = true; });
-                    return false; // keep dialog open
+                    allSelected = !allSelected;
+                    checks.forEach(function (c) { c.checked = allSelected; });
+                    syncSelectAllBtn();
+                    return false;
                 }
             });
         }
-
-        buttons.push({
-            text: t("recovery.btnRestoreFull") || "Full Restore",
-            cls: "btn--secondary",
-            action: function () {
-                sendNative({ action: "restoreSnapshot", snapshotId: snapshotId, mode: "full" });
-            }
-        });
 
         if (hasDiffs) {
             buttons.push({
@@ -1434,7 +1484,7 @@
                     });
                     if (names.length === 0) {
                         showToast(t("recovery.diffNoneSelected") || "Please select at least one variable.", "warn");
-                        return false; // keep dialog open
+                        return false;
                     }
                     sendNative({
                         action: "restoreSnapshot",
@@ -1448,12 +1498,32 @@
 
         buttons.push({ text: t("dialog.cancel"), cls: "" });
 
-        showDialogRaw(
-            hasDiffs ? (t("recovery.diffTitle") || "Changed Variables")
-                     : (t("recovery.diffEmptyTitle") || "Restore Snapshot"),
-            html,
-            buttons
-        );
+        var dialogTitleText = hasDiffs ? (t("recovery.diffTitle") || "Changed Variables")
+                                       : (t("recovery.diffEmptyTitle") || "Restore Snapshot");
+        showDialogRaw(dialogTitleText, html, buttons, "dialog--wide");
+
+        // Inject warning hint into dialog header (same line as title)
+        var titleEl = document.getElementById("dialogTitle");
+        if (titleEl) {
+            var hintText = t("recovery.fullRestoreHint") || "Full Restore will replace ALL current variables with the snapshot values. This cannot be undone.";
+            titleEl.innerHTML = esc(dialogTitleText) + '<span class="dialog-title-hint" title="' + esc(hintText) + '">' + esc(hintText) + '</span>';
+        }
+
+        // After DOM is built, grab the toggle button ref so we can update its text later
+        selectAllBtn = document.getElementById("btnToggleAll");
+
+        // Sync toggle button label when user manually checks/unchecks individual items
+        if (hasDiffs) {
+            var diffChecks = document.querySelectorAll(".diff-check");
+            diffChecks.forEach(function (chk) {
+                chk.addEventListener("change", function () {
+                    var total = document.querySelectorAll(".diff-check").length;
+                    var checked = document.querySelectorAll(".diff-check:checked").length;
+                    allSelected = (checked === total);
+                    syncSelectAllBtn();
+                });
+            });
+        }
     }
 
     document.getElementById("dialogOverlay").addEventListener("click", function (e) {
