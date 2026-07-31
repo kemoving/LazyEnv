@@ -26,6 +26,7 @@
 #include <Windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <dwmapi.h>
 #include <shellscalingapi.h>
 #include <ShObjIdl.h>
