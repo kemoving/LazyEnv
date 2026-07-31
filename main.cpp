@@ -1194,6 +1194,20 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
 
+    case WM_DPICHANGED: {
+        // lParam points to a RECT with the suggested new window size/position
+        // for the new DPI. Apply it, then resize WebView2 so its scale updates.
+        auto* const suggestedRect = reinterpret_cast<RECT*>(lParam);
+        SetWindowPos(hwnd, nullptr,
+                     suggestedRect->left,
+                     suggestedRect->top,
+                     suggestedRect->right - suggestedRect->left,
+                     suggestedRect->bottom - suggestedRect->top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        g_webview.resize();
+        return 0;
+    }
+
     case WM_GETMINMAXINFO: {
         auto* mmi = reinterpret_cast<MINMAXINFO*>(lParam);
         mmi->ptMinTrackSize.x = 800;

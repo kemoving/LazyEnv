@@ -239,8 +239,25 @@ void WebViewHost::postMessage(const std::string& json) {
 
 void WebViewHost::resize() {
     if (!controller_ || !parentHwnd_) return;
+
     RECT bounds;
     GetClientRect(parentHwnd_, &bounds);
+
+    // Update WebView2 rasterization scale for the current monitor DPI.
+    // This is required when the window moves between monitors with different
+    // DPIs, or when maximizing/restoring changes the effective DPI.
+    UINT dpi = GetDpiForWindow(parentHwnd_);
+    if (dpi == 0) dpi = USER_DEFAULT_SCREEN_DPI;
+
+    wil::com_ptr<ICoreWebView2Controller3> controller3;
+    if (SUCCEEDED(controller_->QueryInterface(IID_PPV_ARGS(&controller3)))) {
+        controller3->put_RasterizationScale(static_cast<double>(dpi) / USER_DEFAULT_SCREEN_DPI);
+    }
+
+    // Notify WebView2 that the parent window moved/resized so it can update
+    // its internal DPI/position tracking before bounds are applied.
+    controller_->NotifyParentWindowPositionChanged();
+
     controller_->put_Bounds(bounds);
 }
 
