@@ -379,6 +379,9 @@ a:hover { text-decoration: underline; }
 .btn--accent:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn--accent:active { background: var(--accent-active); border-color: var(--accent-active); }
 
+.btn--secondary { background: var(--bg-hover); border-color: var(--border-strong); color: var(--text-primary); font-weight: 500; }
+.btn--secondary:hover { background: var(--bg-active); border-color: var(--accent); }
+
 .btn--subtle { background: transparent; border-color: transparent; }
 .btn--subtle:hover { background: var(--accent-subtle); border-color: transparent; }
 
