@@ -1552,27 +1552,9 @@
             }
             var cmd = r.command || "-";
             var cmdEsc = esc(cmd);
-            // Render full command (no truncation) + a copy button next to it.
-            // The copy button is hidden when there's no command to copy.
-            var copyBtn = cmd === "-"
-                ? ""
-                : '<button type="button" class="copy-btn" data-copy="' + cmdEsc + '" title="' + esc(t("summary.copyCmd")) + '" aria-label="' + esc(t("summary.copyCmd")) + '">'
-                +   '<svg class="copy-btn__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
-                +     '<rect x="5" y="5" width="9" height="9" rx="1.5"/>'
-                +     '<path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-7A1.5 1.5 0 0 0 1 3.5v7A1.5 1.5 0 0 0 2.5 12H5"/>'
-                +   '</svg>'
-                +   '<svg class="copy-btn__icon-done" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
-                +     '<polyline points="3 8.5 6.5 12 13 4.5"/>'
-                +   '</svg>'
-                + '</button>';
             html += '<tr><td>' + esc(name) + '</td>' +
                 '<td><span class="badge ' + badgeCls + '">' + badgeText + '</span></td>' +
-                '<td class="text-mono text-sm col-command">' +
-                '<div class="cmd-cell">' +
-                '<code class="cmd-cell__text">' + cmdEsc + '</code>' +
-                copyBtn +
-                '</div>' +
-                '</td>' +
+                '<td class="text-mono text-sm col-command"><code class="cmd-text">' + cmdEsc + '</code></td>' +
                 '<td class="text-sm" title="' + esc(r.output || r.message || "-") + '">' + esc(r.output || r.message || "-") + '</td></tr>';
         });
 
@@ -1580,52 +1562,7 @@
         container.innerHTML = html;
     }
 
-    // Event delegation: copy a command to clipboard when its copy button is
-    // clicked. Uses `data-copy` (the original command text) and shows a brief
-    // "is-copied" state for visual feedback. Falls back to a hidden textarea
-    // + execCommand if the async Clipboard API is unavailable (e.g. older
-    // WebView2 runtime that lacks user-gesture permissions).
-    function _copyToClipboard(text) {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            return navigator.clipboard.writeText(text);
-        }
-        return new Promise(function (resolve, reject) {
-            try {
-                var ta = document.createElement("textarea");
-                ta.value = text;
-                ta.style.position = "fixed";
-                ta.style.opacity = "0";
-                document.body.appendChild(ta);
-                ta.focus();
-                ta.select();
-                var ok = document.execCommand("copy");
-                document.body.removeChild(ta);
-                ok ? resolve() : reject(new Error("execCommand copy failed"));
-            } catch (e) {
-                reject(e);
-            }
-        });
-    }
 
-    document.getElementById("summaryContent").addEventListener("click", function (e) {
-        var btn = e.target.closest(".copy-btn");
-        if (!btn || !this.contains(btn)) return;
-        var text = btn.getAttribute("data-copy");
-        if (!text) return;
-        e.preventDefault();
-        e.stopPropagation();
-        var original = btn.getAttribute("title");
-        _copyToClipboard(text).then(function () {
-            btn.classList.add("is-copied");
-            btn.setAttribute("title", t("summary.copied"));
-            setTimeout(function () {
-                btn.classList.remove("is-copied");
-                btn.setAttribute("title", original || t("summary.copyCmd"));
-            }, 1200);
-        }).catch(function () {
-            // Silent fail — the title attribute already shows the full text on hover.
-        });
-    });
 
     // -----------------------------------------------------------------------
     // Dialog

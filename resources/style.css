@@ -1163,6 +1163,11 @@ textarea.input {
     font-family: var(--font-mono); font-size: 12px; color: var(--accent);
     padding: 8px 16px; background: rgba(96,205,255,0.04);
     border-top: 1px solid var(--border-subtle);
+    user-select: text;
+    cursor: text;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
 }
 
 /* ============================================================================
@@ -1367,7 +1372,7 @@ textarea.input {
 #summaryContent .data-table th:nth-child(4),
 #summaryContent .data-table td:nth-child(4) { width: 46%; }   /* 详情 */
 
-/* 命令列 — 完整显示，自动换行（长 winget 命令不再省略） */
+/* 命令列 — 完整显示，可选中文本，支持 Ctrl+C 复制 */
 #summaryContent .data-table td:nth-child(3) {
     word-break: break-all;
     overflow-wrap: anywhere;
@@ -1376,52 +1381,12 @@ textarea.input {
     unicode-bidi: bidi-override;
 }
 
-/* 命令 cell 布局：完整文本 + 复制按钮 */
-#summaryContent .cmd-cell {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-}
-#summaryContent .cmd-cell__text {
-    flex: 1 1 auto;
-    min-width: 0;
-    white-space: pre-wrap;
-    word-break: break-all;
+#summaryContent .cmd-text {
     font-family: var(--font-mono);
     font-size: 12px;
+    user-select: text;
+    cursor: text;
 }
-
-/* 复制按钮 */
-#summaryContent .copy-btn {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    background: transparent;
-    border: 1px solid var(--border-default);
-    border-radius: 4px;
-    color: var(--text-tertiary);
-    cursor: pointer;
-    transition: color 0.15s, border-color 0.15s, background 0.15s;
-}
-#summaryContent .copy-btn:hover {
-    color: var(--accent);
-    border-color: var(--accent);
-    background: var(--accent-subtle);
-}
-#summaryContent .copy-btn:active { transform: scale(0.92); }
-#summaryContent .copy-btn svg { width: 12px; height: 12px; display: block; }
-#summaryContent .copy-btn__icon-done { display: none; color: var(--accent); }
-#summaryContent .copy-btn.is-copied {
-    color: var(--accent);
-    border-color: var(--accent);
-    background: var(--accent-subtle-hover, var(--accent-subtle));
-}
-#summaryContent .copy-btn.is-copied .copy-btn__icon { display: none; }
-#summaryContent .copy-btn.is-copied .copy-btn__icon-done { display: block; }
 
 /* 详情列 — 允许换行但保持可读 */
 #summaryContent .data-table td:nth-child(4) {

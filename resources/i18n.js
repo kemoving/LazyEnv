@@ -233,8 +233,6 @@
             "summary.skipped":                  "Skipped",
             "summary.clearHistory":              "Clear",
             "summary.recordCount":               "{0} record(s)",
-            "summary.copyCmd":                   "Copy command",
-            "summary.copied":                    "Copied",
 
             // Dialog
             "dialog.cancel":                    "Cancel",
@@ -446,8 +444,6 @@
             "summary.skipped":                  "\u5df2\u8df3\u8fc7",
             "summary.clearHistory":              "\u6e05\u7a7a",
             "summary.recordCount":               "\u5171 {0} \u6761\u8bb0\u5f55",
-            "summary.copyCmd":                   "\u590d\u5236\u547d\u4ee4",
-            "summary.copied":                    "\u5df2\u590d\u5236",
 
             // Dialog
             "dialog.cancel":                    "\u53d6\u6d88",
