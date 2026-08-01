@@ -27,10 +27,7 @@
 
 #include <sstream>
 #include <algorithm>
-#include <atomic>
 #include <format>
-#include <mutex>
-#include <thread>
 #include <cstdio>
 
 namespace lazyenv {
@@ -354,19 +351,6 @@ static DWORD waitForProcessExit(HANDLE hProcess, DWORD timeoutMs) {
     return exitCode;
 }
 
-// SEH-safe ReadFile wrapper — pure C types, no C++ objects.
-// Returns bytes read; returns 0 on SEH exception or ReadFile failure.
-static DWORD sehSafeReadFile(HANDLE hFile, char* buffer, DWORD bufferSize) {
-    DWORD bytesRead = 0;
-    __try {
-        if (!ReadFile(hFile, buffer, bufferSize, &bytesRead, nullptr))
-            bytesRead = 0;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        bytesRead = 0;
-    }
-    return bytesRead;
-}
-
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
@@ -424,11 +408,9 @@ int Installer::runCommand(const std::string& cmdLine,
 // ---------------------------------------------------------------------------
 // Streaming command execution with line-by-line callback
 //
-// Architecture:
-//   Reader thread — SEH-safe chunked pipe reads, appends to shared buffer.
-//   Main thread   — polls buffer, splits lines, fires onLine callbacks in real-time.
-// This avoids the old batch-read deadlock: winget can take minutes to download,
-// but we now stream each line as it arrives instead of waiting for process exit.
+// Uses the same SEH-safe batch-read (sehReadPipeLoop) as runCommand.
+// Line splitting and onLine callbacks happen AFTER the pipe is closed,
+// in a clean C++ context with no SEH risk.
 // ---------------------------------------------------------------------------
 int Installer::runCommandStreaming(const std::string& cmdLine,
                                   std::string& fullOutput,
@@ -447,74 +429,42 @@ int Installer::runCommandStreaming(const std::string& cmdLine,
     }
     CloseHandle(ph.hWrite);
 
-    // Shared state — reader thread writes raw bytes, main thread consumes lines
-    std::string        rawOutput;
-    std::mutex         outputMutex;
-    std::atomic<bool>  readerDone{false};
+    // SEH-safe read into a fixed-size stack buffer (same approach as runCommand)
+    RawExecResult raw{};
+    sehReadPipeLoop(ph.hRead, &raw);
+    CloseHandle(ph.hRead);
 
-    std::thread reader([&]() {
-        char buf[4096];
-        DWORD bytesRead;
-        // SEH protection is inside sehSafeReadFile — no __try needed here,
-        // keeping this lambda compatible with C++ object unwinding.
-        while ((bytesRead = sehSafeReadFile(ph.hRead, buf, sizeof(buf))) > 0) {
-            std::lock_guard<std::mutex> lock(outputMutex);
-            rawOutput.append(buf, bytesRead);
+    if (!raw.success) {
+        // SEH caught an exception during I/O — save what we got.
+        const DWORD kMaxBuf = static_cast<DWORD>(sizeof(raw.outputData));
+        if (raw.outputLen > 0 && raw.outputLen <= kMaxBuf) {
+            fullOutput.assign(raw.outputData, raw.outputLen);
         }
-        readerDone.store(true);
-    });
-
-    // Main thread: process lines incrementally — no SEH context, safe for callbacks
-    std::string lineBuffer;
-    size_t      consumed = 0;
-
-    while (!readerDone.load()) {
-        {
-            std::lock_guard<std::mutex> lock(outputMutex);
-            while (consumed < rawOutput.size()) {
-                char ch = rawOutput[consumed++];
-                if (ch == '\n') {
-                    if (!lineBuffer.empty() && lineBuffer.back() == '\r')
-                        lineBuffer.pop_back();
-                    if (!lineBuffer.empty() && onLine)
-                        onLine(lineBuffer);
-                    lineBuffer.clear();
-                } else {
-                    lineBuffer += ch;
-                }
-            }
-        }
-        Sleep(50);  // Avoid busy-wait; winget outputs every few seconds
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        return -2;
     }
 
-    // Drain remaining bytes after reader exits
-    {
-        std::lock_guard<std::mutex> lock(outputMutex);
-        while (consumed < rawOutput.size()) {
-            char ch = rawOutput[consumed++];
-            if (ch == '\n') {
+    fullOutput.assign(raw.outputData, raw.outputLen);
+
+    // Split raw output into lines and invoke callback (no I/O, safe)
+    if (onLine) {
+        std::string lineBuffer;
+        for (DWORD i = 0; i < raw.outputLen; ++i) {
+            if (raw.outputData[i] == '\n') {
                 if (!lineBuffer.empty() && lineBuffer.back() == '\r')
                     lineBuffer.pop_back();
-                if (!lineBuffer.empty() && onLine)
-                    onLine(lineBuffer);
+                if (!lineBuffer.empty()) onLine(lineBuffer);
                 lineBuffer.clear();
             } else {
-                lineBuffer += ch;
+                lineBuffer += raw.outputData[i];
             }
         }
+        if (!lineBuffer.empty()) {
+            if (lineBuffer.back() == '\r') lineBuffer.pop_back();
+            if (!lineBuffer.empty()) onLine(lineBuffer);
+        }
     }
-
-    // Flush final partial line
-    if (!lineBuffer.empty()) {
-        if (lineBuffer.back() == '\r') lineBuffer.pop_back();
-        if (!lineBuffer.empty() && onLine)
-            onLine(lineBuffer);
-    }
-
-    fullOutput = rawOutput;
-
-    reader.join();
-    CloseHandle(ph.hRead);
 
     DWORD exitCode = waitForProcessExit(pi.hProcess, timeoutMs);
     CloseHandle(pi.hProcess);
