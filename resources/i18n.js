@@ -231,6 +231,8 @@
             "summary.success":                  "Success",
             "summary.failed":                   "Failed",
             "summary.skipped":                  "Skipped",
+            "summary.clearHistory":              "Clear",
+            "summary.recordCount":               "{0} record(s)",
 
             // Dialog
             "dialog.cancel":                    "Cancel",
@@ -440,6 +442,8 @@
             "summary.success":                  "\u6210\u529f",
             "summary.failed":                   "\u5931\u8d25",
             "summary.skipped":                  "\u5df2\u8df3\u8fc7",
+            "summary.clearHistory":              "\u6e05\u7a7a",
+            "summary.recordCount":               "\u5171 {0} \u6761\u8bb0\u5f55",
 
             // Dialog
             "dialog.cancel":                    "\u53d6\u6d88",

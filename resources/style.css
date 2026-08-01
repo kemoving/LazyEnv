@@ -1309,6 +1309,75 @@ textarea.input {
     border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-card);
 }
 
+/* Summary header — record count + clear button */
+.summary-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+}
+.summary-header__count {
+    font-size: 13px; font-weight: 600;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+}
+
+/* Danger outline button (used for clear-history) */
+.btn--danger-outline {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; font-size: 12px; font-weight: 600;
+    color: #f87171;
+    background: transparent;
+    border: 1px solid rgba(248,113,113,0.35);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: "Segoe UI", sans-serif;
+    line-height: 1.4;
+}
+.btn--danger-outline:hover {
+    background: rgba(248,113,113,0.12);
+    border-color: rgba(248,113,113,0.6);
+    color: #fca5a5;
+}
+.btn--danger-outline:active { transform: scale(0.97); }
+.btn--danger-outline .btn-icon-svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* Summary table — fixed column widths + overflow handling
+   Prevents long winget commands from pushing the table out of the container. */
+#summaryContent .data-table {
+    table-layout: fixed;
+    width: 100%;
+}
+#summaryContent .data-table th,
+#summaryContent .data-table td { vertical-align: top; }
+
+/* Column widths (must sum to 100%) */
+#summaryContent .data-table th:nth-child(1),
+#summaryContent .data-table td:nth-child(1) { width: 14%; }   /* 软件包 */
+#summaryContent .data-table th:nth-child(2),
+#summaryContent .data-table td:nth-child(2) { width: 9%;  }   /* 状态 */
+#summaryContent .data-table th:nth-child(3),
+#summaryContent .data-table td:nth-child(3) { width: 31%; }   /* 命令 */
+#summaryContent .data-table th:nth-child(4),
+#summaryContent .data-table td:nth-child(4) { width: 46%; }   /* 详情 */
+
+/* 命令列 — 单行 + 省略号 (hover 通过 title 看到完整内容) */
+#summaryContent .data-table td:nth-child(3) {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: ltr;
+    unicode-bidi: bidi-override;
+}
+
+/* 详情列 — 允许换行但保持可读 */
+#summaryContent .data-table td:nth-child(4) {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.45;
+}
+
 /* ============================================================================
    Empty State
    ============================================================================ */

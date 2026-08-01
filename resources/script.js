@@ -1496,6 +1496,13 @@
     // -----------------------------------------------------------------------
     // Summary
     // -----------------------------------------------------------------------
+    function clearInstallHistory() {
+        installResults.clear();
+        persistInstallResults();
+        renderSummary();
+    }
+    window.clearInstallHistory = clearInstallHistory;
+
     function renderSummary() {
         var container = document.getElementById("summaryContent");
         if (installResults.size === 0) {
@@ -1503,7 +1510,19 @@
             return;
         }
 
-        var html = '<table class="data-table"><thead><tr>' +
+        var html = '';
+        html += '<div class="summary-header">';
+        html += '<span class="summary-header__count">' + esc(t("summary.recordCount", installResults.size)) + '</span>';
+        html += '<button type="button" class="btn btn--sm btn--danger-outline" onclick="clearInstallHistory()">'
+            + '<svg class="btn-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
+            + '<polyline points="1 4 3 4 15 4"/>'
+            + '<path d="M5 4V2.5a1 1 0 011-1h4a1 1 0 011 1V4"/>'
+            + '<path d="M3 4l1.2 9.6a1 1 0 001 .9h5.6a1 1 0 001-.9L13 4"/>'
+            + '</svg>'
+            + esc(t("summary.clearHistory")) + '</button>';
+        html += '</div>';
+
+        html += '<table class="data-table"><thead><tr>' +
             '<th>' + esc(t("summary.colName")) + '</th>' +
             '<th>' + esc(t("summary.colStatus")) + '</th>' +
             '<th>' + esc(t("summary.colCommand")) + '</th>' +
@@ -1523,8 +1542,8 @@
             }
             html += '<tr><td>' + esc(name) + '</td>' +
                 '<td><span class="badge ' + badgeCls + '">' + badgeText + '</span></td>' +
-                '<td class="text-mono text-sm">' + esc(r.command || "-") + '</td>' +
-                '<td class="text-sm">' + esc(r.output || r.message || "-") + '</td></tr>';
+                '<td class="text-mono text-sm" title="' + esc(r.command || "-") + '">' + esc(r.command || "-") + '</td>' +
+                '<td class="text-sm" title="' + esc(r.output || r.message || "-") + '">' + esc(r.output || r.message || "-") + '</td></tr>';
         });
 
         html += '</tbody></table>';
