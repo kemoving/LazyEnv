@@ -1531,7 +1531,9 @@
                 case "success": badgeCls = "badge--success"; badgeText = t("summary.success"); break;
                 case "failed":  badgeCls = "badge--error";   badgeText = t("summary.failed");  break;
                 case "skipped": badgeCls = "badge--warning"; badgeText = t("summary.skipped"); break;
-                default:        badgeCls = "";               badgeText = r.status;  break;
+                case "running": badgeCls = "badge--info";    badgeText = t("summary.running"); break;
+                case "pending": badgeCls = "badge--neutral"; badgeText = t("summary.pending"); break;
+                default:        badgeCls = "badge--neutral"; badgeText = r.status;            break;
             }
             var cmd = r.command || "-";
             var cmdEsc = esc(cmd);
@@ -1752,6 +1754,7 @@
 
         function renderScope(diffList, label) {
             if (diffList.length === 0) return '';
+            var isSystem = !!diffList[0].system;
             var out = '';
             out += '<div class="diff-scope">';
             out += '<div class="diff-scope-title">' + esc(label) + ' <span class="diff-scope-count">' + diffList.length + '</span></div>';
@@ -1759,7 +1762,7 @@
                 var badgeCls = "diff-badge diff-badge--" + d.changeType;
                 var badgeText = changeTypeLabels[d.changeType] || d.changeType;
                 // Single-line layout: [checkbox] key  old→new  [badge]  [view-btn]
-                out += '<label class="diff-item" data-dbg-name="' + esc(d.name) + '">';
+                out += '<label class="diff-item" data-system="' + (isSystem ? '1' : '0') + '" data-dbg-name="' + esc(d.name) + '">';
                 out += '<input type="checkbox" class="diff-check" checked value="' + esc(d.name) + '|' + (d.system ? '1' : '0') + '">';
                 out += '<span class="diff-name">' + esc(d.name) + '</span>';
                 out += '<span class="diff-values">';
@@ -1923,7 +1926,8 @@
                         if (!parentRow) return;
 
                         var name = parentRow.querySelector(".diff-name").textContent;
-                        var item = diffs.find(function (d) { return d.name === name; });
+                        var rowSystem = parentRow.getAttribute("data-system") === "1";
+                        var item = diffs.find(function (d) { return d.name === name && !!d.system === rowSystem; });
                         if (!item) return;
 
                         showDiffDetailDialog(item.name, item.currentValue, item.snapshotValue, item.changeType, !!item.system);
