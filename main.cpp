@@ -22,6 +22,7 @@
 #include "webview_host.h"
 #include "installer.h"
 #include "rollback.h"
+#include "debug_log.h"
 
 #include <Windows.h>
 #include <windowsx.h>
@@ -365,6 +366,13 @@ std::string handleWebMessage(const std::string& message) {
     // snapshot/registry/filesystem operations, return a structured
     // error so the UI can report the problem instead of crashing.
     try {
+        // ------ Debug log bridge (JS -> native log file) ------
+        if (action == "debugLog") {
+            std::string msg = jsonGetStr(root, "msg");
+            DBG_LOG("[JS] " << msg);
+            return "";
+        }
+
         // ------ Admin check ------
         if (action == "adminCheck") {
         bool isAdmin = IsUserAnAdmin();
@@ -377,6 +385,11 @@ std::string handleWebMessage(const std::string& message) {
         // explicitly restore it in WM_SIZE (DWMWA_TRANSITIONS_FORCEDISABLED
         // may cause Windows to pick a wrong default restore position).
         GetWindowRect(g_mainWindow, &g_preMinimizeRect);
+        DBG_LOG("MINIMIZE: saved preMin={" << g_preMinimizeRect.left << "," << g_preMinimizeRect.top
+                << "," << g_preMinimizeRect.right << "," << g_preMinimizeRect.bottom
+                << "} size=" << (g_preMinimizeRect.right - g_preMinimizeRect.left) << "x"
+                << (g_preMinimizeRect.bottom - g_preMinimizeRect.top)
+                << " isMax=" << (g_isMaximized ? "1" : "0"));
         ShowWindow(g_mainWindow, SW_MINIMIZE);
         return "";
     }
@@ -1286,7 +1299,24 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         // When minimized, GetClientRect returns a tiny rect (~160x28),
         // and put_Bounds with that rect collapses the WebView2 renderer.
         if (wParam == SIZE_MINIMIZED) {
+            DBG_LOG("WM_SIZE: **SKIP** (SIZE_MINIMIZED)");
             return 0;
+        }
+
+        {
+            // Pre-resize diagnostics
+            RECT cr{}, wr{};
+            GetClientRect(hwnd, &cr);
+            GetWindowRect(hwnd, &wr);
+            const char* szName = (wParam == SIZE_RESTORED)  ? "RESTORED" :
+                                 (wParam == SIZE_MAXIMIZED) ? "MAXIMIZED" :
+                                 (wParam == SIZE_MAXSHOW)   ? "MAXSHOW"  : "OTHER";
+            bool hasPreMin = !IsRectEmpty(&g_preMinimizeRect);
+            DBG_LOG("WM_SIZE: " << szName << " (wParam=" << (int)wParam << ")"
+                    << " client=" << (cr.right-cr.left) << "x" << (cr.bottom-cr.top)
+                    << " window={" << wr.left << "," << wr.top << "," << wr.right << "," << wr.bottom << "}"
+                    << " preMinEmpty=" << (hasPreMin ? "0" : "1")
+                    << " isMax=" << (g_isMaximized ? "1" : "0"));
         }
 
         // --- Restore from minimized ---
@@ -1299,6 +1329,7 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         // SetWindowPos which will fire a separate WM_SIZE that is handled
         // normally below.
         if (wParam == SIZE_RESTORED && !IsRectEmpty(&g_preMinimizeRect)) {
+            DBG_LOG("WM_SIZE: clearing preMinimizeRect");
             SetRectEmpty(&g_preMinimizeRect);
         }
 
@@ -1309,6 +1340,8 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             GetClientRect(hwnd, &cr);
             int cw = cr.right - cr.left;
             int ch = cr.bottom - cr.top;
+            DBG_LOG("WM_SIZE: -> postMessage windowState width=" << cw << " height=" << ch
+                    << " max=" << (g_isMaximized ? "1" : "0"));
             std::string stateMsg = std::format(
                 "{{\"action\":\"windowState\",\"maximized\":{},\"width\":{},\"height\":{}}}",
                 g_isMaximized ? "true" : "false", cw, ch);

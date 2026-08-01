@@ -26,6 +26,7 @@
 // ============================================================================
 
 #include "webview_host.h"
+#include "debug_log.h"
 
 #include <ShlObj.h>
 
@@ -247,9 +248,14 @@ void WebViewHost::resize() {
     UINT dpi = GetDpiForWindow(parentHwnd_);
     if (dpi == 0) dpi = USER_DEFAULT_SCREEN_DPI;
 
+    double scale = static_cast<double>(dpi) / USER_DEFAULT_SCREEN_DPI;
+    DBG_LOG("RESIZE: client=" << (bounds.right-bounds.left) << "x" << (bounds.bottom-bounds.top)
+            << " dpi=" << dpi << " scale=" << scale
+            << " bounds={" << bounds.left << "," << bounds.top << "," << bounds.right << "," << bounds.bottom << "}");
+
     wil::com_ptr<ICoreWebView2Controller3> controller3;
     if (SUCCEEDED(controller_->QueryInterface(IID_PPV_ARGS(&controller3)))) {
-        controller3->put_RasterizationScale(static_cast<double>(dpi) / USER_DEFAULT_SCREEN_DPI);
+        controller3->put_RasterizationScale(scale);
     }
 
     controller_->NotifyParentWindowPositionChanged();

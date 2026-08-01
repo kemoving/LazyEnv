@@ -53,6 +53,21 @@
     var envVarCache = [];       // [{name, value, type}]
 
     // -----------------------------------------------------------------------
+    // Diagnostic log bridge — sends to C++ debug_log via postMessage
+    // -----------------------------------------------------------------------
+    function dbgLog(msg) {
+        try {
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: "debugLog",
+                    msg: msg
+                }));
+            }
+            console.log("[LazyEnv DIAG]", msg);
+        } catch (e) { /* never fail on logging */ }
+    }
+
+    // -----------------------------------------------------------------------
     // Viewport fix — C++ sends windowState with native client-area dimensions
     // after put_Bounds. ResizeObserver / resize serve as a fallback for
     // incremental drag-resize.
@@ -62,15 +77,23 @@
     // -----------------------------------------------------------------------
 
     var _reflowRAF = null;
+    var _setVarsCount = 0;
 
     function setViewportVars(w, h) {
+        ++_setVarsCount;
         document.documentElement.style.setProperty("--vw", (w * 0.01) + "px");
         document.documentElement.style.setProperty("--vh", (h * 0.01) + "px");
+        dbgLog("setViewportVars #" + _setVarsCount
+               + " w=" + w + " h=" + h
+               + " window.inner=" + window.innerWidth + "x" + window.innerHeight);
     }
 
     function triggerReflow() {
         var w = window.innerWidth  || document.documentElement.clientWidth;
         var h = window.innerHeight || document.documentElement.clientHeight;
+        dbgLog("triggerReflow window.inner=" + w + "x" + h
+               + " docElem.client=" + document.documentElement.clientWidth
+               + "x" + document.documentElement.clientHeight);
         setViewportVars(w, h);
 
         // Throttle: at most one forceLayout per animation frame
@@ -78,16 +101,31 @@
             _reflowRAF = requestAnimationFrame(function () {
                 _reflowRAF = null;
                 var app = document.querySelector(".app");
-                if (app) void app.offsetHeight;  // non-visual reflow
+                if (app) {
+                    void app.offsetHeight;  // non-visual reflow
+                    var style = window.getComputedStyle(app);
+                    dbgLog("triggerReflow(rAF) .app computed=" + style.width + "x" + style.height
+                           + " offsetHeight=" + app.offsetHeight);
+                }
             });
         }
     }
 
     // Keep ResizeObserver and resize event as fallbacks
     if (window.ResizeObserver) {
-        new ResizeObserver(triggerReflow).observe(document.documentElement);
+        new ResizeObserver(function (entries) {
+            var e = entries[entries.length - 1];
+            if (e && e.contentRect) {
+                dbgLog("ResizeObserver contentRect="
+                       + e.contentRect.width + "x" + e.contentRect.height);
+            }
+            triggerReflow();
+        }).observe(document.documentElement);
     }
-    window.addEventListener("resize", triggerReflow);
+    window.addEventListener("resize", function () {
+        dbgLog("resize EVENT window.inner=" + window.innerWidth + "x" + window.innerHeight);
+        triggerReflow();
+    });
 
     triggerReflow();
 
@@ -252,6 +290,9 @@
                 break;
 
             case "windowState":
+                dbgLog("windowState RECEIVED: max=" + d.maximized
+                       + " width=" + d.width + " height=" + d.height
+                       + " window.inner=" + window.innerWidth + "x" + window.innerHeight);
                 isMaximized = d.maximized;
                 updateMaxBtn();
                 // Use native client-area dimensions — unaffected by
@@ -265,7 +306,13 @@
                     // the restored window paints at the correct size on
                     // its very first frame (critical after minimize).
                     var app = document.querySelector(".app");
-                    if (app) void app.offsetHeight;
+                    if (app) {
+                        void app.offsetHeight;
+                        var style = window.getComputedStyle(app);
+                        dbgLog("windowState after reflow: .app computed=" + style.width + "x" + style.height
+                               + " offsetHeight=" + app.offsetHeight
+                               + " --vh=" + getComputedStyle(document.documentElement).getPropertyValue("--vh"));
+                    }
                 }
                 break;
 

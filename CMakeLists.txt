@@ -64,6 +64,7 @@ set(SOURCES
     installer.h
     rollback.cpp
     rollback.h
+    debug_log.h
 )
 
 # ---------------------------------------------------------------------------
