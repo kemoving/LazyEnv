@@ -35,6 +35,10 @@
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "shcore.lib")
 
+#ifndef DWMWA_TRANSITIONS_FORCEDISABLED
+#define DWMWA_TRANSITIONS_FORCEDISABLED 3
+#endif
+
 #include <string>
 #include <sstream>
 #include <fstream>
@@ -1362,9 +1366,12 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case lazyenv::WM_REAPPLY_MAXIMIZE: {
         // Deferred re-apply after restore from minimized.
-        // Explicit SetWindowPos to rcWork ensures correctness regardless
-        // of what Windows/DWM did during the restore sequence.
+        // DwmFlush waits for the compositor to finish any in-flight
+        // animation frames before we reposition.  Combined with
+        // DWMWA_TRANSITIONS_FORCEDISABLED, this is a belt-and-suspenders
+        // guarantee that the window ends up exactly at rcWork.
         if (g_isMaximized) {
+            DwmFlush();
             HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi{};
             mi.cbSize = sizeof(mi);
@@ -1522,6 +1529,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
         MessageBoxW(nullptr, L"Failed to create main window.", L"LazyEnv", MB_ICONERROR);
         return 1;
     }
+
+    // Disable DWM window transition animations.  Without this, DWM's
+    // restore-from-minimized animation runs asynchronously in the compositor
+    // and can move the window so its bottom is hidden behind the taskbar.
+    // With transitions disabled, the window instantly appears at its stored
+    // (rcWork) position, which is always correct.
+    BOOL disableTransitions = TRUE;
+    DwmSetWindowAttribute(g_mainWindow, DWMWA_TRANSITIONS_FORCEDISABLED,
+                          &disableTransitions, sizeof(disableTransitions));
 
     // Get file:// URI for the HTML page
     std::wstring htmlUri = getHtmlUri();
