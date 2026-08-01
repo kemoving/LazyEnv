@@ -1568,6 +1568,112 @@
         overlay.classList.add("dialog-overlay--visible");
     }
 
+    // Change-type label map (shared by showDiffDialog & showDiffDetailDialog)
+    var changeTypeLabels = {
+        "added":    t("recovery.badgeAdded")    || "New",
+        "modified": t("recovery.badgeModified") || "Changed",
+        "removed":  t("recovery.badgeRemoved")  || "Removed"
+    };
+
+    // -----------------------------------------------------------------------
+    // Diff detail dialog — 只读对比详情（点击 diff 行的查看按钮触发）
+    // -----------------------------------------------------------------------
+    function showDiffDetailDialog(name, currentValue, snapshotValue, changeType, isSystem) {
+        console.log("[diffDebug] showDiffDetailDialog called:", name, changeType, "system:", isSystem);
+        console.log("[diffDebug] currentValue length:", (currentValue || "").length);
+        console.log("[diffDebug] snapshotValue length:", (snapshotValue || "").length);
+
+        var title = t("recovery.diffDetailTitle", name);
+        console.log("[diffDebug] title:", title);
+        var scopeLabel = isSystem ? t("settings.viewScopeSystem") : t("settings.viewScopeUser");
+        var badgeCls = "diff-badge diff-badge--" + changeType;
+        var badgeText = changeTypeLabels[changeType] || changeType;
+        var isPath = name.toUpperCase() === "PATH";
+
+        var bodyHtml = '<div class="dialog-form">';
+
+        // Meta row: scope + type
+        bodyHtml += '<div class="diff-detail-meta">';
+        bodyHtml += '<div><span class="dialog-form__label">' + esc(t("settings.viewScope")) + '</span> ';
+        bodyHtml += '<span class="diff-detail-scope">' + esc(scopeLabel) + '</span></div>';
+        bodyHtml += '<div><span class="dialog-form__label">' + esc(t("settings.type")) + '</span> ';
+        bodyHtml += '<span class="' + badgeCls + '">' + esc(badgeText) + '</span></div>';
+        bodyHtml += '</div>';
+
+        if (isPath && changeType === "modified") {
+            // PATH-style diff: per-entry added/removed
+            var oldEntries = (currentValue || "").split(";").map(function (s) { return s.trim(); }).filter(Boolean);
+            var newEntries = (snapshotValue || "").split(";").map(function (s) { return s.trim(); }).filter(Boolean);
+            var oldSet = {}; oldEntries.forEach(function (e) { oldSet[e] = (oldSet[e] || 0) + 1; });
+            var newSet = {}; newEntries.forEach(function (e) { newSet[e] = (newSet[e] || 0) + 1; });
+            var added = []; var removed = []; var unchanged = [];
+            oldEntries.forEach(function (e) {
+                if (newSet[e] > 0) { newSet[e]--; unchanged.push(e); }
+                else { removed.push(e); }
+            });
+            newEntries.forEach(function (e) {
+                if (newSet[e] > 0) { added.push(e); newSet[e]--; }
+            });
+
+            var totalLines = oldEntries.length + added.length;
+            bodyHtml += '<div class="diff-detail-summary">';
+            bodyHtml += esc(t("recovery.diffLineCount", totalLines, added.length, removed.length));
+            bodyHtml += '</div>';
+
+            bodyHtml += '<div class="diff-detail-paths">';
+            added.forEach(function (e) {
+                bodyHtml += '<div class="diff-detail-path diff-detail-path--added">'
+                    + '<span class="diff-detail-path__marker">+</span>'
+                    + '<span class="diff-detail-path__text">' + esc(e) + '</span>'
+                    + '<span class="diff-detail-path__label">' + esc(t("recovery.diffPathAdded")) + '</span>'
+                    + '</div>';
+            });
+            removed.forEach(function (e) {
+                bodyHtml += '<div class="diff-detail-path diff-detail-path--removed">'
+                    + '<span class="diff-detail-path__marker">-</span>'
+                    + '<span class="diff-detail-path__text">' + esc(e) + '</span>'
+                    + '<span class="diff-detail-path__label">' + esc(t("recovery.diffPathRemoved")) + '</span>'
+                    + '</div>';
+            });
+            unchanged.forEach(function (e) {
+                bodyHtml += '<div class="diff-detail-path diff-detail-path--unchanged">'
+                    + '<span class="diff-detail-path__marker">·</span>'
+                    + '<span class="diff-detail-path__text">' + esc(e) + '</span>'
+                    + '<span class="diff-detail-path__label">' + esc(t("recovery.diffPathUnchanged")) + '</span>'
+                    + '</div>';
+            });
+            bodyHtml += '</div>';
+        } else if (changeType === "added") {
+            bodyHtml += '<div class="diff-detail-side">';
+            bodyHtml += '<div class="diff-detail-side__label">' + esc(t("recovery.diffSnapshotLabel")) + '</div>';
+            bodyHtml += '<textarea class="input input--mono input--readonly diff-detail-textarea" rows="8" readonly>' + esc(snapshotValue || "") + '</textarea>';
+            bodyHtml += '</div>';
+        } else if (changeType === "removed") {
+            bodyHtml += '<div class="diff-detail-side">';
+            bodyHtml += '<div class="diff-detail-side__label">' + esc(t("recovery.diffCurrentLabel")) + '</div>';
+            bodyHtml += '<textarea class="input input--mono input--readonly diff-detail-textarea" rows="8" readonly>' + esc(currentValue || "") + '</textarea>';
+            bodyHtml += '</div>';
+        } else {
+            // modified (non-PATH): side-by-side
+            bodyHtml += '<div class="diff-detail-grid">';
+            bodyHtml += '<div class="diff-detail-side">';
+            bodyHtml += '<div class="diff-detail-side__label">' + esc(t("recovery.diffCurrentLabel")) + '</div>';
+            bodyHtml += '<textarea class="input input--mono input--readonly diff-detail-textarea" rows="10" readonly>' + esc(currentValue || "") + '</textarea>';
+            bodyHtml += '</div>';
+            bodyHtml += '<div class="diff-detail-side">';
+            bodyHtml += '<div class="diff-detail-side__label">' + esc(t("recovery.diffSnapshotLabel")) + '</div>';
+            bodyHtml += '<textarea class="input input--mono input--readonly diff-detail-textarea" rows="10" readonly>' + esc(snapshotValue || "") + '</textarea>';
+            bodyHtml += '</div>';
+            bodyHtml += '</div>';
+        }
+
+        bodyHtml += '</div>';
+
+        showDialogRaw(title, bodyHtml, [
+            { text: t("settings.viewClose") || "Close", cls: "btn--accent" }
+        ]);
+    }
+
     // -----------------------------------------------------------------------
     // Diff dialog — 增量恢复前的差异对比选择
     // -----------------------------------------------------------------------
@@ -1577,12 +1683,6 @@
         // Group diffs by scope
         var userDiffs = diffs.filter(function (d) { return !d.system; });
         var sysDiffs  = diffs.filter(function (d) { return  d.system; });
-
-        var changeTypeLabels = {
-            "added":    t("recovery.badgeAdded")    || "New",
-            "modified": t("recovery.badgeModified") || "Changed",
-            "removed":  t("recovery.badgeRemoved")  || "Removed"
-        };
 
         var html = '';
         html += '<div class="diff-dialog">';
@@ -1605,8 +1705,8 @@
             diffList.forEach(function (d) {
                 var badgeCls = "diff-badge diff-badge--" + d.changeType;
                 var badgeText = changeTypeLabels[d.changeType] || d.changeType;
-                // Single-line layout: [checkbox] key  old→new  [badge]
-                out += '<label class="diff-item">';
+                // Single-line layout: [checkbox] key  old→new  [badge]  [view-btn]
+                out += '<label class="diff-item" data-dbg-name="' + esc(d.name) + '">';
                 out += '<input type="checkbox" class="diff-check" checked value="' + esc(d.name) + '|' + (d.system ? '1' : '0') + '">';
                 out += '<span class="diff-name">' + esc(d.name) + '</span>';
                 out += '<span class="diff-values">';
@@ -1626,6 +1726,9 @@
                 }
                 out += '</span>';
                 out += '<span class="' + badgeCls + '">' + esc(badgeText) + '</span>';
+                out += '<button type="button" class="diff-detail-btn" title="' + esc(t("recovery.viewDiffBtn")) + '" aria-label="' + esc(t("recovery.viewDiffBtn")) + '">'
+                    + '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8s2.5-5 6.5-5 6.5 5 6.5 5-2.5 5-6.5 5-6.5-5-6.5-5z"/><circle cx="8" cy="8" r="2.2"/></svg>'
+                    + '</button>';
                 out += '</label>';
             });
             out += '</div>';
@@ -1734,12 +1837,49 @@
         // Sync toggle button label when user manually checks/unchecks individual items
         if (hasDiffs) {
             var diffChecks = document.querySelectorAll(".diff-check");
+            console.log("[diffDebug] Found .diff-check count:", diffChecks.length);
             diffChecks.forEach(function (chk) {
                 chk.addEventListener("change", function () {
                     var total = document.querySelectorAll(".diff-check").length;
                     var checked = document.querySelectorAll(".diff-check:checked").length;
                     allSelected = (checked === total);
                     syncSelectAllBtn();
+                });
+            });
+
+            // View-detail button — use mousedown to fire BEFORE the label grabs the click
+            var detailBtns = document.querySelectorAll(".diff-detail-btn");
+            console.log("[diffDebug] Found .diff-detail-btn count:", detailBtns.length);
+            detailBtns.forEach(function (btn, idx) {
+                var row = btn.closest(".diff-item");
+                var dbgName = row ? (row.getAttribute("data-dbg-name") || row.querySelector(".diff-name").textContent) : "???";
+                console.log("[diffDebug] btn#" + idx + " in row:", dbgName);
+
+                btn.addEventListener("mousedown", function (e) {
+                    console.log("[diffDebug] mousedown FIRED on btn, target:", e.target.tagName, ".", e.target.className);
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    var parentRow = btn.closest(".diff-item");
+                    console.log("[diffDebug] closest .diff-item:", parentRow ? parentRow.tagName : null);
+                    if (!parentRow) return;
+
+                    var name = parentRow.querySelector(".diff-name").textContent;
+                    console.log("[diffDebug] name from DOM:", name);
+                    console.log("[diffDebug] diffs array length:", diffs.length);
+
+                    var item = diffs.find(function (d, i) {
+                        var match = d.name === name;
+                        if (i < 3) console.log("[diffDebug] diffs[" + i + "].name:", d.name, "match:", match);
+                        return match;
+                    });
+                    if (!item) {
+                        console.warn("[diffDebug] FAILED to find diff item for name:", name);
+                        return;
+                    }
+                    console.log("[diffDebug] Found diff item:", item.name, item.changeType, "isSystem:", !!item.system);
+                    console.log("[diffDebug] Calling showDiffDetailDialog...");
+                    showDiffDetailDialog(item.name, item.currentValue, item.snapshotValue, item.changeType, !!item.system);
                 });
             });
         }

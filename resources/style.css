@@ -780,6 +780,142 @@ textarea.input {
 .diff-badge--modified { background: rgba(96,165,250,0.18);  color: #60a5fa; }
 .diff-badge--removed  { background: rgba(248,113,113,0.18); color: #f87171; }
 
+/* View-detail icon button on diff items */
+.diff-detail-btn {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    margin-left: 4px;
+}
+.diff-detail-btn svg { width: 14px; height: 14px; }
+.diff-detail-btn:hover {
+    background: rgba(96,165,250,0.14);
+    border-color: rgba(96,165,250,0.45);
+    color: #93c5fd;
+}
+.diff-detail-btn:active { transform: scale(0.95); }
+
+/* Diff detail dialog — meta row */
+.diff-detail-meta {
+    display: flex; gap: 18px; align-items: center;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+}
+.diff-detail-scope {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    font-weight: 600;
+    margin-left: 4px;
+}
+
+/* PATH-style diff: per-entry summary + list */
+.diff-detail-summary {
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+}
+.diff-detail-paths {
+    display: flex; flex-direction: column; gap: 2px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px;
+    max-height: 360px; overflow-y: auto;
+}
+.diff-detail-path {
+    display: grid;
+    grid-template-columns: 18px 1fr auto;
+    align-items: center; gap: 8px;
+    padding: 5px 8px;
+    border-radius: 3px;
+    font-family: var(--font-mono); font-size: 12px;
+}
+.diff-detail-path__marker {
+    width: 18px; height: 18px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px;
+    border-radius: 3px;
+}
+.diff-detail-path__text {
+    color: var(--text-primary);
+    word-break: break-all;
+}
+.diff-detail-path__label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    font-weight: 600;
+    font-family: "Segoe UI", sans-serif;
+}
+.diff-detail-path--added {
+    background: rgba(52,211,153,0.08);
+}
+.diff-detail-path--added .diff-detail-path__marker {
+    background: rgba(52,211,153,0.25); color: #34d399;
+}
+.diff-detail-path--added .diff-detail-path__label { color: #34d399; }
+
+.diff-detail-path--removed {
+    background: rgba(248,113,113,0.08);
+}
+.diff-detail-path--removed .diff-detail-path__marker {
+    background: rgba(248,113,113,0.25); color: #f87171;
+}
+.diff-detail-path--removed .diff-detail-path__label { color: #f87171; }
+.diff-detail-path--removed .diff-detail-path__text {
+    text-decoration: line-through;
+    color: var(--text-secondary);
+}
+
+.diff-detail-path--unchanged .diff-detail-path__marker {
+    background: rgba(255,255,255,0.06); color: var(--text-tertiary);
+}
+.diff-detail-path--unchanged .diff-detail-path__label { color: var(--text-tertiary); }
+.diff-detail-path--unchanged:nth-child(odd) {
+    background: rgba(255,255,255,0.015);
+}
+
+/* Side-by-side diff layout */
+.diff-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.diff-detail-side {
+    display: flex; flex-direction: column; gap: 6px;
+    min-width: 0;
+}
+.diff-detail-side__label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    padding: 4px 10px;
+    background: rgba(255,255,255,0.04);
+    border-radius: var(--radius-sm);
+    text-align: center;
+}
+.diff-detail-textarea {
+    width: 100%; box-sizing: border-box;
+    min-height: 160px;
+    resize: vertical;
+}
+
 /* Title-bar warning hint (shown next to dialog title) */
 .dialog-title-hint {
     font-size: 12px; 
