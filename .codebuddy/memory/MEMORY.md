@@ -1,7 +1,7 @@
 # LazyEnv — Project Memory
 
 ## 项目定位
-跨平台、可恢复、零污染的问卷式开发环境配置工具（Windows 原生桌面应用，v0.6.0）。
+跨平台、可恢复、零污染的问卷式开发环境配置工具（Windows 原生桌面应用，v0.6.1）。
 
 ## 技术栈
 - **语言**: C++17/20 (后端) + HTML/CSS/JS (前端)
@@ -55,7 +55,7 @@ resources/        — index.html, style.css, script.js, i18n.js
 
 ## 版本发布
 - Git tag `v*` 触发 GitHub Actions CI → 构建 + 打包 zip + 分类 Changelog + GitHub Release
-- 当前版本: v0.6.0
+- 当前版本: v0.6.1
 
 ## 代码位置
 - 主仓库: `https://github.com/kemoving/LazyEnv`

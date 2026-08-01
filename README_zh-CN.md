@@ -4,7 +4,7 @@
 
 **跨平台、可恢复、零污染的问卷式开发环境配置工具。**
 
-版本: 0.6.0
+版本: 0.6.1
 
 ---
 
@@ -129,8 +129,8 @@ cmake --build build --config Release
 推送版本 tag 即可触发自动 GitHub Release，并生成分类 Changelog：
 
 ```powershell
-git tag v0.6.0
-git push origin v0.6.0
+git tag v0.6.1
+git push origin v0.6.1
 ```
 
 CI 会自动编译、打包 zip、从提交历史生成分类 Changelog，并创建 GitHub Release。

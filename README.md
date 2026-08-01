@@ -4,7 +4,7 @@
 
 **Cross-platform, recoverable, zero-pollution questionnaire-style development environment configuration tool.**
 
-Version: 0.6.0
+Version: 0.6.1
 
 ---
 
@@ -128,8 +128,8 @@ cmake --build build --config Release
 Push a version tag to trigger an automated GitHub Release with changelog:
 
 ```powershell
-git tag v0.6.0
-git push origin v0.6.0
+git tag v0.6.1
+git push origin v0.6.1
 ```
 
 The CI will build the executable, package it into a zip, generate a categorized changelog from commit history, and create a GitHub Release.

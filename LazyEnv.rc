@@ -24,12 +24,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "LazyEnv Project"
             VALUE "FileDescription",  "LazyEnv - Development Environment Setup Tool"
-            VALUE "FileVersion",      "0.6.0"
+            VALUE "FileVersion",      "0.6.1"
             VALUE "InternalName",     "LazyEnv"
             VALUE "LegalCopyright",   "MIT License"
             VALUE "OriginalFilename", "LazyEnv.exe"
             VALUE "ProductName",      "LazyEnv"
-            VALUE "ProductVersion",   "0.6.0"
+            VALUE "ProductVersion",   "0.6.1"
         END
     END
     BLOCK "VarFileInfo"
