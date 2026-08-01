@@ -1486,6 +1486,10 @@ textarea.input {
     font-family: var(--font-sans);
 }
 
+.titlebar__install-input--error {
+    border-color: var(--status-error) !important;
+}
+
 .titlebar__install-browse {
     width: 22px;
     height: 22px;
@@ -1512,19 +1516,14 @@ textarea.input {
 }
 
 .titlebar__install-tooltip {
-    position: absolute;
-    top: 100%;
-    left: 18px;
-    margin-top: 2px;
-    padding: 4px 8px;
+    padding: 6px 10px;
     background: var(--bg-tooltip);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--status-error);
     border-radius: 4px;
-    font-size: 10px;
+    font-size: 11px;
     color: var(--status-error);
-    white-space: nowrap;
-    z-index: 999;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    white-space: normal;
+    line-height: 1.4;
 }
 
 /* ============================================================================

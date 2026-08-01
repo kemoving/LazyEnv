@@ -546,6 +546,7 @@
                 currentInstallLocation = saved;
                 var liInput = document.getElementById("txtInstallLocation");
                 if (liInput) liInput.value = saved;
+                updateLocationTooltip(saved);
             }
         } catch (e) { /* ignore */ }
     }
@@ -1252,6 +1253,12 @@
             // Basic validation: must contain a drive letter followed by colon and backslash
             if (!/^[A-Za-z]:\\/.test(rawLoc)) {
                 showToast(t("packages.noDriveSpaceAfterColon"), "error");
+                locInput.focus();
+                return;
+            }
+            // Reject paths with spaces: some installers tokenize --location by space
+            if (/\s/.test(rawLoc)) {
+                showToast(t("packages.noSpacesInPath"), "error");
                 locInput.focus();
                 return;
             }
@@ -2046,11 +2053,29 @@
     sendNative({ action: "adminCheck" });
     navigateTo("home");
 
+    // Tooltip helper for install location
+    function updateLocationTooltip(val) {
+        var tooltip = document.getElementById("installLocationTooltip");
+        var input = document.getElementById("txtInstallLocation");
+        if (!tooltip) return;
+        if (val && /\s/.test(val)) {
+            tooltip.textContent = t("packages.noSpacesInPath");
+            tooltip.style.display = "block";
+            if (input) input.classList.add("titlebar__install-input--error");
+        } else {
+            tooltip.style.display = "none";
+            tooltip.textContent = "";
+            if (input) input.classList.remove("titlebar__install-input--error");
+        }
+    }
+
     // Install location input persistence (titlebar)
     var _txtInstallLoc = document.getElementById("txtInstallLocation");
     if (_txtInstallLoc) {
         _txtInstallLoc.addEventListener("input", function () {
-            saveInstallLocation(this.value);
+            var val = this.value;
+            saveInstallLocation(val);
+            updateLocationTooltip(val);
         });
     }
 
