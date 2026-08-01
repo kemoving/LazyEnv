@@ -130,6 +130,15 @@
                 updateAdminWarning();
                 break;
 
+            case "folderSelected":
+                if (d.path) {
+                    var flInput = document.getElementById("txtInstallLocation");
+                    if (flInput) { flInput.value = d.path; }
+                    currentInstallLocation = d.path;
+                    saveInstallLocation(d.path);
+                }
+                break;
+
             case "probeResult":
                 handleProbeResult(d);
                 break;
@@ -346,6 +355,15 @@
                 });
             }, 200);
         }
+        if (obj.action === "selectFolder") {
+            // Mock: prompt for folder path (native WebView2 should show a real folder picker)
+            setTimeout(function () {
+                var path = prompt("Select install location:", currentInstallLocation || "D:\\Tools");
+                if (path && path.trim()) {
+                    handleNative({ action: "folderSelected", path: path.trim() });
+                }
+            }, 100);
+        }
         if (obj.action === "install") {
             setTimeout(function () { handleNative({ action: "installStarted", snapshotId: "mock-snap" }); }, 100);
             var pkgs = obj.packages || [];
@@ -467,6 +485,21 @@
                 });
             }
         } catch (e) { /* ignore corrupt data */ }
+    }
+
+    function saveInstallLocation(path) {
+        try { localStorage.setItem("lazyenv_install_location", path); } catch (e) { /* ignore */ }
+    }
+
+    function loadInstallLocation() {
+        try {
+            var saved = localStorage.getItem("lazyenv_install_location");
+            if (saved) {
+                currentInstallLocation = saved;
+                var liInput = document.getElementById("txtInstallLocation");
+                if (liInput) liInput.value = saved;
+            }
+        } catch (e) { /* ignore */ }
     }
 
     // -----------------------------------------------------------------------
@@ -1105,24 +1138,23 @@
         installResults.clear();
         installLogs.clear();
 
-        // Read and validate custom install location
+        // Read and validate custom install location (from titlebar)
         var locInput = document.getElementById("txtInstallLocation");
-        var locError = document.getElementById("installLocationError");
         var rawLoc = (locInput.value || "").trim();
         currentInstallLocation = "";
 
         if (rawLoc) {
             // Basic validation: must contain a drive letter followed by colon and backslash
             if (!/^[A-Za-z]:\\/.test(rawLoc)) {
-                locError.style.display = "block";
+                showToast(t("packages.noDriveSpaceAfterColon"), "error");
                 locInput.focus();
                 return;
             }
-            locError.style.display = "none";
             currentInstallLocation = rawLoc;
+            saveInstallLocation(rawLoc);
         } else {
-            locError.style.display = "none";
             currentInstallLocation = "";
+            saveInstallLocation("");
         }
 
         // Split into to-install and already-installed
@@ -1645,7 +1677,24 @@
     // Init
     // -----------------------------------------------------------------------
     loadPersistedState();
+    loadInstallLocation();
     sendNative({ action: "adminCheck" });
     navigateTo("home");
+
+    // Install location input persistence (titlebar)
+    var _txtInstallLoc = document.getElementById("txtInstallLocation");
+    if (_txtInstallLoc) {
+        _txtInstallLoc.addEventListener("input", function () {
+            saveInstallLocation(this.value);
+        });
+    }
+
+    // Browse folder button
+    var _btnBrowse = document.getElementById("btnBrowseFolder");
+    if (_btnBrowse) {
+        _btnBrowse.addEventListener("click", function () {
+            sendNative({ action: "selectFolder" });
+        });
+    }
 
 })();

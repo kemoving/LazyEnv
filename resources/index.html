@@ -22,6 +22,12 @@
     <div class="titlebar__drag" id="dragRegion">
         <span class="titlebar__label">LazyEnv</span>
     </div>
+    <div class="titlebar__install" id="titlebarInstall">
+        <svg class="titlebar__install-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M.5 1a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h15a.5.5 0 0 0 .5-.5V5a.5.5 0 0 0-.5-.5H9a.5.5 0 0 1-.354-.146l-1.293-1.293A1.5 1.5 0 0 0 6.293 2.5H1.5A.5.5 0 0 0 1 2.5V1.5A.5.5 0 0 0 .5 1z"/></svg>
+        <input type="text" id="txtInstallLocation" class="titlebar__install-input" data-i18n-placeholder="packages.installLocationPlaceholder" placeholder="Install location..." spellcheck="false" />
+        <button class="titlebar__install-browse" id="btnBrowseFolder" title="Browse">…</button>
+        <div class="titlebar__install-tooltip" id="installLocationTooltip" style="display:none"></div>
+    </div>
     <div class="titlebar__controls">
         <button class="titlebar__btn" id="btnMin" title="Minimize">
             <svg viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
@@ -232,13 +238,7 @@
 
                 <div id="packageList"></div>
 
-                <!-- Custom Install Location -->
-                <div class="install-location mt-md" id="installLocationSection">
-                    <label class="install-location__label" for="txtInstallLocation" data-i18n="packages.installLocation">Install Location</label>
-                    <input type="text" id="txtInstallLocation" class="install-location__input" data-i18n-placeholder="packages.installLocationPlaceholder" placeholder="e.g. D:\Tools" spellcheck="false" />
-                    <p class="install-location__hint" data-i18n="packages.locationHint">Tip: Use a non-system drive to keep C: clean.</p>
-                    <p class="install-location__error" id="installLocationError" data-i18n="packages.noDriveSpaceAfterColon" style="display:none">Please include a drive letter and path.</p>
-                </div>
+
 
                 <div class="mt-lg flex-between">
                     <span id="pkgSelectedCount" class="text-secondary"></span>

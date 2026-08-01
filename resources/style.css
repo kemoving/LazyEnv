@@ -1167,52 +1167,84 @@ textarea.input {
 .flex-between { display: flex; align-items: center; justify-content: space-between; }
 
 /* ============================================================================
-   Install Location Input
+   Titlebar Install Location
    ============================================================================ */
-.install-location {
+.titlebar__install {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    align-items: center;
+    gap: 5px;
+    height: 100%;
+    position: relative;
 }
 
-.install-location__label {
-    font-size: 13px;
-    color: var(--text-secondary);
-    font-weight: 400;
+.titlebar__install-icon {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    opacity: 0.7;
 }
 
-.install-location__input {
-    width: 100%;
-    height: 36px;
-    padding: 0 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    background: var(--bg-input);
+.titlebar__install-input {
+    width: 200px;
+    height: 22px;
+    padding: 0 7px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 4px;
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 11px;
     font-family: var(--font-mono);
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, background 0.15s;
     box-sizing: border-box;
 }
 
-.install-location__input:focus {
+.titlebar__install-input:focus {
     border-color: var(--accent);
+    background: rgba(255,255,255,0.10);
 }
 
-.install-location__input::placeholder {
+.titlebar__install-input::placeholder {
     color: var(--text-tertiary);
     font-family: var(--font-sans);
 }
 
-.install-location__hint {
-    margin: 0;
+.titlebar__install-browse {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.1s, color 0.1s;
     font-size: 12px;
-    color: var(--text-tertiary);
+    font-weight: 700;
+    line-height: 1;
 }
 
-.install-location__error {
-    margin: 0;
-    font-size: 12px;
+.titlebar__install-browse:hover {
+    background: rgba(255,255,255,0.14);
+    color: var(--text-primary);
+}
+
+.titlebar__install-tooltip {
+    position: absolute;
+    top: 100%;
+    left: 18px;
+    margin-top: 2px;
+    padding: 4px 8px;
+    background: var(--bg-tooltip);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 10px;
     color: var(--status-error);
+    white-space: nowrap;
+    z-index: 999;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
