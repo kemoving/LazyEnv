@@ -1135,6 +1135,41 @@ std::string handleWebMessage(const std::string& message) {
                            jsonEscape(name), jsonEscape(val));
     }
 
+    // ------ Select folder (browse) ------
+    if (action == "selectFolder") {
+        IFileOpenDialog* pfd = nullptr;
+        HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                       CLSCTX_INPROC_SERVER,
+                                       IID_PPV_ARGS(&pfd));
+        if (SUCCEEDED(hr)) {
+            DWORD opt = 0;
+            pfd->GetOptions(&opt);
+            pfd->SetOptions(opt | FOS_PICKFOLDERS);
+            if (SUCCEEDED(pfd->Show(g_mainWindow))) {
+                IShellItem* psi = nullptr;
+                if (SUCCEEDED(pfd->GetResult(&psi))) {
+                    PWSTR wpath = nullptr;
+                    psi->GetDisplayName(SIGDN_FILESYSPATH, &wpath);
+                    if (wpath) {
+                        int len = WideCharToMultiByte(CP_UTF8, 0, wpath, -1,
+                                                      nullptr, 0, nullptr, nullptr);
+                        std::string path(len - 1, '\0');
+                        WideCharToMultiByte(CP_UTF8, 0, wpath, -1,
+                                           path.data(), len, nullptr, nullptr);
+                        CoTaskMemFree(wpath);
+                        psi->Release();
+                        pfd->Release();
+                        return std::format("{{\"action\":\"folderSelected\",\"path\":\"{}\"}}",
+                                           jsonEscape(path));
+                    }
+                    psi->Release();
+                }
+            }
+            pfd->Release();
+        }
+        return ""; // User cancelled — silent, no notification needed
+    }
+
     return "{\"action\":\"error\",\"message\":\"Unknown action\"}";
 
     } catch (const std::exception& e) {
