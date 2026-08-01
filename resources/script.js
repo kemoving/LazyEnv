@@ -924,6 +924,16 @@
 
         tbody.innerHTML = html;
 
+        // Double-click row to view variable details (skip if clicking on action buttons)
+        tbody.querySelectorAll("tr[data-name]").forEach(function (row) {
+            row.addEventListener("dblclick", function (e) {
+                if (e.target.closest(".envvar-actions") || e.target.closest("button")) return;
+                var name = row.dataset.name;
+                var v = envVarCache.find(function (x) { return x.name === name; });
+                if (v) showEnvVarViewDialog(v.name, v.value, v.type);
+            });
+        });
+
         // Bind edit buttons
         tbody.querySelectorAll(".btn-edit-var").forEach(function (btn) {
             btn.addEventListener("click", function () {
@@ -959,6 +969,54 @@
     document.getElementById("btnAddEnvVar").addEventListener("click", function () {
         showEnvVarEditDialog("", "", "REG_SZ", true);
     });
+
+    // Read-only view dialog for environment variable details
+    function showEnvVarViewDialog(name, value, type) {
+        var title = t("settings.viewVarTitle", name);
+        var scopeLabel = envVarScope === "system" ? t("settings.viewScopeSystem") : t("settings.viewScopeUser");
+        var isPathVar = name.toUpperCase() === "PATH";
+
+        var bodyHtml = '<div class="dialog-form">';
+        bodyHtml += '<div class="dialog-form__group">';
+        bodyHtml += '<label class="dialog-form__label">' + esc(t("settings.colName")) + '</label>';
+        bodyHtml += '<div class="dialog-view-value">' + esc(name) + '</div>';
+        bodyHtml += '</div>';
+
+        bodyHtml += '<div class="dialog-form__group">';
+        bodyHtml += '<label class="dialog-form__label">' + esc(t("settings.colValue")) + '</label>';
+        if (isPathVar) {
+            var pathEntries = value.split(";").filter(function (p) { return p.trim(); });
+            bodyHtml += '<div class="dialog-path-readonly">';
+            pathEntries.forEach(function (entry) {
+                bodyHtml += '<div class="path-row">' + esc(entry) + '</div>';
+            });
+            bodyHtml += '</div>';
+        } else {
+            if (value.length > 200) {
+                bodyHtml += '<textarea class="input input--mono input--readonly dialog-form__textarea" rows="6" readonly>' + esc(value) + '</textarea>';
+            } else {
+                bodyHtml += '<div class="dialog-view-value">' + esc(value) + '</div>';
+            }
+        }
+        bodyHtml += '</div>';
+
+        bodyHtml += '<div class="dialog-form__group">';
+        bodyHtml += '<label class="dialog-form__label">' + esc(t("settings.type")) + '</label>';
+        bodyHtml += '<div class="dialog-view-value">' + esc(type) +
+            (type === "REG_EXPAND_SZ" ? ' <span class="envvar-type-badge">EXP</span>' : '') +
+            '</div>';
+        bodyHtml += '</div>';
+
+        bodyHtml += '<div class="dialog-form__group">';
+        bodyHtml += '<label class="dialog-form__label">' + esc(t("settings.viewScope")) + '</label>';
+        bodyHtml += '<div class="dialog-view-value">' + esc(scopeLabel) + '</div>';
+        bodyHtml += '</div>';
+        bodyHtml += '</div>';
+
+        showDialogRaw(title, bodyHtml, [
+            { text: t("settings.viewClose"), cls: "btn--accent" }
+        ]);
+    }
 
     function showEnvVarEditDialog(name, value, type, isNew) {
         var isPathVar = name.toUpperCase() === "PATH";
