@@ -1159,14 +1159,18 @@ textarea.input {
 
 .install-item--expanded .install-item__log { display: block; }
 
+.install-item__cmd-wrap {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-top: 1px solid var(--border-subtle);
+}
 .install-item__cmd {
     font-family: var(--font-mono); font-size: 12px; color: var(--accent);
     padding: 8px 16px; background: rgba(96,205,255,0.04);
-    border-top: 1px solid var(--border-subtle);
     user-select: text;
-    cursor: text;
-    white-space: pre-wrap;
-    word-break: break-word;
+    cursor: pointer;
+    /* 不设 overflow/white-space，让 wrap 控制视觉；textContent 保持完整 */
 }
 
 /* ============================================================================
@@ -1371,20 +1375,32 @@ textarea.input {
 #summaryContent .data-table th:nth-child(4),
 #summaryContent .data-table td:nth-child(4) { width: 46%; }   /* 详情 */
 
-/* 命令列 — 完整显示，可选中文本，支持 Ctrl+C 复制 */
+/* 软件包列 — 单行显示，超长省略 */
+#summaryContent .data-table td:nth-child(1) {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 状态列 — 单行显示（badge 短文本，避免被意外折行） */
+#summaryContent .data-table td:nth-child(2) {
+    white-space: nowrap;
+}
+
+/* 命令列 — 单行截断 (TD 负责裁剪，code 保持全文可选) */
 #summaryContent .data-table td:nth-child(3) {
-    overflow-wrap: break-word;
-    line-height: 1.45;
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 #summaryContent .cmd-text {
-    display: block;
     font-family: var(--font-mono);
     font-size: 12px;
     user-select: text;
-    cursor: text;
-    white-space: pre-wrap;
-    word-break: break-word;
+    cursor: pointer;
+    /* 不设 overflow/white-space，让 TD 控制视觉；textContent 保持完整 */
 }
 
 /* 详情列 — 单行截断，鼠标悬浮显示完整内容 */
@@ -1509,4 +1525,41 @@ textarea.input {
     white-space: nowrap;
     z-index: 999;
     box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+/* ============================================================================
+   Cmd Tooltip — 悬浮显示完整命令行
+   ============================================================================ */
+
+.cmd-tooltip {
+    position: fixed;
+    z-index: 9999;
+    max-width: 520px;
+    padding: 8px 12px;
+    background: #1a1a2e;
+    border: 1px solid var(--accent-subtle, rgba(96,205,255,0.2));
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--accent);
+    white-space: pre-wrap;
+    word-break: break-word;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.55);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.cmd-tooltip.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Detail tooltip variant: sans-serif, larger, relaxed line-height */
+.cmd-tooltip.cmd-tooltip--detail {
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 12px;
+    line-height: 1.6;
+    max-width: 600px;
 }

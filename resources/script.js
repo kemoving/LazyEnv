@@ -1330,7 +1330,8 @@
 
             // Command + log
             if (r.command) {
-                html += '<div class="install-item__cmd">' + esc(r.command) + '</div>';
+                var cmdEscaped = esc(r.command);
+                html += '<div class="install-item__cmd-wrap"><div class="install-item__cmd" title="' + cmdEscaped + '">' + cmdEscaped + '</div></div>';
             }
 
             var logLines = installLogs.get(id) || [];
@@ -1554,8 +1555,8 @@
             var cmdEsc = esc(cmd);
             html += '<tr><td>' + esc(name) + '</td>' +
                 '<td><span class="badge ' + badgeCls + '">' + badgeText + '</span></td>' +
-                '<td class="text-mono text-sm col-command"><code class="cmd-text">' + cmdEsc + '</code></td>' +
-                '<td class="text-sm" title="' + esc(r.output || r.message || "-") + '">' + esc(r.output || r.message || "-") + '</td></tr>';
+                '<td class="text-mono text-sm col-command"><code class="cmd-text" title="' + cmdEsc + '">' + cmdEsc + '</code></td>' +
+                '<td class="text-sm summary-detail">' + esc(r.output || r.message || "-") + '</td></tr>';
         });
 
         html += '</tbody></table>';
@@ -1980,6 +1981,87 @@
         d.textContent = s;
         return d.innerHTML;
     }
+
+    // -----------------------------------------------------------------------
+    // Cmd tooltip + double-click copy
+    // -----------------------------------------------------------------------
+
+    var cmdTooltip = (function () {
+        var el = document.createElement("div");
+        el.className = "cmd-tooltip";
+        el.setAttribute("aria-hidden", "true");
+        document.body.appendChild(el);
+
+        var currentTarget = null;
+        var hideTimer = 0;
+
+        function show(e) {
+            var target = e.target.closest(".cmd-text, .install-item__cmd, .summary-detail");
+            if (!target) return;
+            var text = target.textContent;
+            if (!text || text === "-") return;
+            currentTarget = target;
+            clearTimeout(hideTimer);
+            el.textContent = text;
+            el.classList.toggle("cmd-tooltip--detail", target.classList.contains("summary-detail"));
+            el.classList.add("is-visible");
+            position(e);
+        }
+
+        function position(e) {
+            var pad = 12;
+            var x = e.clientX + pad;
+            var y = e.clientY - pad;
+            var tw = el.offsetWidth;
+            var th = el.offsetHeight;
+            if (x + tw > window.innerWidth - pad)  x = e.clientX - tw - pad;
+            if (y + th > window.innerHeight - pad) y = e.clientY - th - pad;
+            if (x < pad) x = pad;
+            if (y < pad) y = pad;
+            el.style.left = x + "px";
+            el.style.top  = y + "px";
+        }
+
+        function move(e) {
+            if (!currentTarget) return;
+            position(e);
+        }
+
+        function hide() {
+            currentTarget = null;
+            hideTimer = setTimeout(function () {
+                el.classList.remove("is-visible");
+            }, 80);
+        }
+
+        document.addEventListener("mouseover", function (e) { show(e); });
+        document.addEventListener("mousemove", function (e) { move(e); });
+        document.addEventListener("mouseout", function (e) {
+            if (currentTarget && !currentTarget.contains(e.relatedTarget)) hide();
+        });
+    })();
+
+    // Double-click command text → auto-copy to clipboard
+    document.addEventListener("dblclick", function (e) {
+        var el = e.target.closest(".cmd-text, .install-item__cmd");
+        if (!el) return;
+        var text = el.textContent;
+        if (!text || text === "-") return;
+        // Select all text so user can also Ctrl+C manually
+        var sel = window.getSelection();
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        // Copy to clipboard
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () {
+                    showToast(t("summary.copied") || "Copied");
+                }).catch(function () {});
+            }
+        } catch (_) {}
+    });
 
     // -----------------------------------------------------------------------
     // Init
