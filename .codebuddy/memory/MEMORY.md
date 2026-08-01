@@ -58,4 +58,10 @@ resources/        — index.html, style.css, script.js, i18n.js
 - 当前版本: v0.6.0
 
 ## 代码位置
-- 主仓库: `https://github.com/kemoving/LazyEnv` 
+- 主仓库: `https://github.com/kemoving/LazyEnv`
+
+## 已知修复
+- **伪最大化→最小化→恢复后底部被任务栏遮挡**: `main.cpp` 新增 `WM_WINDOWPOSCHANGING` case，当 `g_isMaximized` 时强制窗口 rect 对齐 `mi.rcWork`
+
+## 用户偏好
+- 不创建日期命名的 memory 文件（如 `YYYY-MM-DD.md`），重要信息直接写入 MEMORY.md

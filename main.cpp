@@ -1313,6 +1313,27 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
 
+    case WM_WINDOWPOSCHANGING: {
+        // When fake-maximized, force the window rect to stay within the
+        // monitor work area. This prevents the taskbar-restore animation
+        // (or DWM) from shifting the rect and making content disappear
+        // behind the taskbar.
+        auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
+        if (g_isMaximized && !(wp->flags & SWP_NOSIZE)) {
+            HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi{};
+            mi.cbSize = sizeof(mi);
+            if (GetMonitorInfoW(mon, &mi)) {
+                wp->x  = mi.rcWork.left;
+                wp->y  = mi.rcWork.top;
+                wp->cx = mi.rcWork.right  - mi.rcWork.left;
+                wp->cy = mi.rcWork.bottom - mi.rcWork.top;
+                wp->flags &= ~SWP_NOMOVE;
+            }
+        }
+        return 0;
+    }
+
     case WM_DESTROY: {
         // Drain any pending WM_WEBVIEW_POST_MESSAGE messages to avoid
         // leaking the heap-allocated std::string* objects.
