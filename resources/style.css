@@ -1563,3 +1563,129 @@ textarea.input {
     line-height: 1.6;
     max-width: 600px;
 }
+
+/* ====================== ABOUT PAGE ====================== */
+.about-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.about-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 20px 22px;
+    transition: border-color 0.15s;
+}
+.about-card:hover {
+    border-color: var(--accent);
+}
+
+.about-card--wide {
+    grid-column: 1 / -1;
+}
+
+.about-card__icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+
+.about-card__title {
+    margin: 0 0 10px 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.about-card__text {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin: 0;
+}
+.about-card__text code {
+    background: rgba(127,127,127,0.15);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+.about-card__text a {
+    color: var(--accent);
+    text-decoration: none;
+}
+.about-card__text a:hover {
+    text-decoration: underline;
+}
+
+/* Feature list */
+.about-card__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.about-card__list li {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(127,127,127,0.08);
+}
+.about-card__list li:last-child {
+    border-bottom: none;
+}
+.about-card__list li strong {
+    color: var(--text-primary);
+}
+
+/* Step list */
+.about-card__steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: about-step;
+}
+.about-card__steps li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(127,127,127,0.08);
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+}
+.about-card__steps li:last-child {
+    border-bottom: none;
+}
+.about-card__steps li > span:first-child {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+}
+.about-card__steps li strong {
+    color: var(--text-primary);
+}
+
+/* Responsive: single column on narrow screens */
+@media (max-width: 720px) {
+    .about-grid {
+        grid-template-columns: 1fr;
+    }
+}

@@ -52,6 +52,8 @@
             "sidebar.maintenance":              "Maintenance",
             "sidebar.recovery":                 "Recovery",
             "sidebar.summary":                  "Summary",
+            "sidebar.info":                     "Info",
+            "sidebar.about":                    "About",
 
             // Home
             "home.title":                       "Home",
@@ -238,6 +240,31 @@
             "summary.recordCount":               "{0} record(s)",
             "summary.copied":                    "Copied",
 
+            // About
+            "about.title":                      "About LazyEnv",
+            "about.desc":                       "A cross-platform, recoverable, zero-pollution dev environment configurator.",
+            "about.whatIs":                     "What is LazyEnv?",
+            "about.whatIsText":                 "LazyEnv is a questionnaire-style development environment configuration tool for Windows. It automates the detection, installation, and management of 40+ development tools — all powered by winget under the hood. No manual PATH wrestling, no leftover pollution, and every change can be rolled back.",
+            "about.features":                   "Key Features",
+            "about.featuresList":               "<li><strong>System Check</strong> — Verify winget availability, admin privileges, and system prerequisites before starting.</li>"
+                                                    + "<li><strong>Smart Detection</strong> — Automatically scans your machine for 40+ already-installed development tools (Python, Node, Go, Rust, Java, etc.).</li>"
+                                                    + "<li><strong>One-Click Install</strong> — Select the tools you need from a curated catalog and install them all at once via winget, with real-time progress tracking.</li>"
+                                                    + "<li><strong>Snapshot &amp; Rollback</strong> — Automatically creates environment snapshots before every change. Restore, diff, export, or import snapshots anytime.</li>"
+                                                    + "<li><strong>Environment Variable Management</strong> — View, add, edit, and delete user/system environment variables directly. PATH is auto-managed for installed tools.</li>"
+                                                    + "<li><strong>Zero Pollution</strong> — Only touch what you ask for. No background services, no registry bloat beyond environment variables. Everything lives under your control.</li>"
+                                                    + "<li><strong>Cross-Platform Vision</strong> — Currently focused on Windows/winget, with macOS (Homebrew) and Linux (apt/dnf) planned for future releases.</li>",
+            "about.howToUse":                   "Getting Started",
+            "about.step1":                      "<strong>System Check</strong> — Open the System Check page to verify your environment meets the requirements.",
+            "about.step2":                      "<strong>Browse Packages</strong> — Navigate to the Packages page, browse by category, and select the tools you need. Optionally set a custom install location.",
+            "about.step3":                      "<strong>Start Installation</strong> — Click \"Start Installation\" and watch the progress. Each package is installed sequentially with live logs.",
+            "about.step4":                      "<strong>Review Results</strong> — After installation, the Summary page shows success/failure status for each package, with detailed output and copyable commands.",
+            "about.step5":                      "<strong>Manage Snapshots</strong> — Use the Recovery page to create, restore, compare, or export environment snapshots. Every install automatically creates a backup.",
+            "about.step6":                      "<strong>Tweak Settings</strong> — In Settings, manually edit user/system environment variables. Snapshots are auto-created before any modification.",
+            "about.privacyTitle":               "Data & Privacy",
+            "about.privacyText":                "LazyEnv runs entirely on your machine. It does not collect telemetry, send usage data, or require network access beyond winget package downloads. Snapshots and configuration data are stored locally under <code>%LOCALAPPDATA%\\LazyEnv</code>. You own your data, always.",
+            "about.licenseTitle":               "Open Source",
+            "about.licenseText":                "LazyEnv is free and open-source software licensed under the <a href=\"https://opensource.org/licenses/MIT\" target=\"_blank\">MIT License</a>. You are free to use, modify, and distribute it. Contributions, issues, and feature requests are welcome on <a href=\"https://github.com/kemoving/LazyEnv\" target=\"_blank\">GitHub</a>.",
+
             // Dialog
             "dialog.cancel":                    "Cancel",
 
@@ -267,6 +294,8 @@
             "sidebar.maintenance":              "\u7ef4\u62a4",
             "sidebar.recovery":                 "\u6062\u590d",
             "sidebar.summary":                  "\u6458\u8981",
+            "sidebar.info":                     "\u4fe1\u606f",
+            "sidebar.about":                    "\u5173\u4e8e",
 
             // Home
             "home.title":                       "\u4e3b\u9875",
@@ -453,6 +482,31 @@
             "summary.recordCount":               "\u5171 {0} \u6761\u8bb0\u5f55",
             "summary.copied":                    "\u5df2\u590d\u5236",
 
+            // About
+            "about.title":                      "\u5173\u4e8e LazyEnv",
+            "about.desc":                       "\u8de8\u5e73\u53f0\u3001\u53ef\u6062\u590d\u3001\u96f6\u6c61\u67d3\u7684\u5f00\u53d1\u73af\u5883\u914d\u7f6e\u5de5\u5177\u3002",
+            "about.whatIs":                     "LazyEnv \u662f\u4ec0\u4e48\uff1f",
+            "about.whatIsText":                 "LazyEnv \u662f\u4e00\u6b3e Windows \u5e73\u53f0\u7684\u95ee\u5377\u5f0f\u5f00\u53d1\u73af\u5883\u914d\u7f6e\u5de5\u5177\u3002\u5b83\u80fd\u81ea\u52a8\u68c0\u6d4b\u3001\u5b89\u88c5\u548c\u7ba1\u7406 40+ \u79cd\u5f00\u53d1\u5de5\u5177\uff0c\u5e95\u5c42\u57fa\u4e8e winget \u5b89\u88c5\u3002\u65e0\u9700\u624b\u52a8\u5904\u7406 PATH\uff0c\u65e0\u6b8b\u7559\u6c61\u67d3\uff0c\u6bcf\u6b21\u66f4\u6539\u90fd\u53ef\u56de\u6eda\u3002",
+            "about.features":                   "\u6838\u5fc3\u529f\u80fd",
+            "about.featuresList":               "<li><strong>\u7cfb\u7edf\u68c0\u67e5</strong> \u2014 \u68c0\u6d4b\u662f\u5426\u5b89\u88c5 winget\u3001\u7ba1\u7406\u5458\u6743\u9650\u53ca\u5176\u4ed6\u5148\u51b3\u6761\u4ef6\u3002</li>"
+                                                    + "<li><strong>\u667a\u80fd\u68c0\u6d4b</strong> \u2014 \u81ea\u52a8\u626b\u63cf\u672c\u673a\u5df2\u5b89\u88c5\u7684 40+ \u79cd\u5f00\u53d1\u5de5\u5177\uff08Python\u3001Node\u3001Go\u3001Rust\u3001Java \u7b49\uff09\u3002</li>"
+                                                    + "<li><strong>\u4e00\u952e\u5b89\u88c5</strong> \u2014 \u4ece\u7cbe\u9009\u8f6f\u4ef6\u5305\u76ee\u5f55\u9009\u62e9\u6240\u9700\u5de5\u5177\uff0c\u901a\u8fc7 winget \u4e00\u6b21\u6027\u5b89\u88c5\uff0c\u5e76\u5b9e\u65f6\u663e\u793a\u8fdb\u5ea6\u3002</li>"
+                                                    + "<li><strong>\u5feb\u7167\u4e0e\u56de\u6eda</strong> \u2014 \u6bcf\u6b21\u4fee\u6539\u524d\u81ea\u52a8\u521b\u5efa\u73af\u5883\u5feb\u7167\uff0c\u53ef\u968f\u65f6\u6062\u590d\u3001\u5bf9\u6bd4\u3001\u5bfc\u51fa\u6216\u5bfc\u5165\u3002</li>"
+                                                    + "<li><strong>\u73af\u5883\u53d8\u91cf\u7ba1\u7406</strong> \u2014 \u76f4\u63a5\u67e5\u770b\u3001\u65b0\u589e\u3001\u7f16\u8f91\u3001\u5220\u9664\u7528\u6237/\u7cfb\u7edf\u73af\u5883\u53d8\u91cf\uff0cPATH \u81ea\u52a8\u7ef4\u62a4\u3002</li>"
+                                                    + "<li><strong>\u96f6\u6c61\u67d3</strong> \u2014 \u4ec0\u4e48\u9700\u8981\u6539\u4ec0\u4e48\uff0c\u4e0d\u52a8\u4f60\u4e0d\u8bf7\u6c42\u7684\u4e1c\u897f\u3002\u65e0\u540e\u53f0\u670d\u52a1\uff0c\u65e0\u989d\u5916\u6ce8\u518c\u8868\u5783\u573e\uff0c\u4e00\u5207\u638c\u63a7\u5728\u4f60\u624b\u4e2d\u3002</li>"
+                                                    + "<li><strong>\u8de8\u5e73\u53f0\u613f\u666f</strong> \u2014 \u76ee\u524d\u4e13\u6ce8 Windows/winget\uff0cmacOS\uff08Homebrew\uff09\u4e0e Linux\uff08apt/dnf\uff09\u5728\u540e\u7eed\u7248\u672c\u4e2d\u63d0\u4f9b\u3002</li>",
+            "about.howToUse":                   "\u4f7f\u7528\u6b65\u9aa4",
+            "about.step1":                      "<strong>\u7cfb\u7edf\u68c0\u67e5</strong> \u2014 \u6253\u5f00\u7cfb\u7edf\u68c0\u67e5\u9875\u786e\u8ba4\u73af\u5883\u6ee1\u8db3\u8981\u6c42\u3002",
+            "about.step2":                      "<strong>\u6d4f\u89c8\u8f6f\u4ef6\u5305</strong> \u2014 \u8fdb\u5165\u8f6f\u4ef6\u5305\u9875\uff0c\u6309\u5206\u7c7b\u6d4f\u89c8\u5e76\u9009\u62e9\u9700\u8981\u7684\u5de5\u5177\uff0c\u53ef\u81ea\u5b9a\u4e49\u5b89\u88c5\u8def\u5f84\u3002",
+            "about.step3":                      "<strong>\u5f00\u59cb\u5b89\u88c5</strong> \u2014 \u70b9\u51fb\u201c\u5f00\u59cb\u5b89\u88c5\u201d\u5e76\u67e5\u770b\u8fdb\u5ea6\uff0c\u6bcf\u4e2a\u8f6f\u4ef6\u5305\u6309\u987a\u5e8f\u5b89\u88c5\u5e76\u5b9e\u65f6\u663e\u793a\u65e5\u5fd7\u3002",
+            "about.step4":                      "<strong>\u67e5\u770b\u7ed3\u679c</strong> \u2014 \u5b89\u88c5\u5b8c\u6210\u540e\uff0c\u6458\u8981\u9875\u663e\u793a\u6bcf\u4e2a\u5305\u7684\u6210\u529f/\u5931\u8d25\u72b6\u6001\uff0c\u4ee5\u53ca\u8be6\u7ec6\u8f93\u51fa\u548c\u53ef\u590d\u5236\u7684\u547d\u4ee4\u3002",
+            "about.step5":                      "<strong>\u7ba1\u7406\u5feb\u7167</strong> \u2014 \u5728\u6062\u590d\u9875\u521b\u5efa\u3001\u6062\u590d\u3001\u5bf9\u6bd4\u6216\u5bfc\u51fa\u73af\u5883\u5feb\u7167\uff0c\u6bcf\u6b21\u5b89\u88c5\u81ea\u52a8\u521b\u5efa\u5907\u4efd\u3002",
+            "about.step6":                      "<strong>\u5fae\u8c03\u8bbe\u7f6e</strong> \u2014 \u5728\u8bbe\u7f6e\u9875\u624b\u52a8\u7f16\u8f91\u7528\u6237/\u7cfb\u7edf\u73af\u5883\u53d8\u91cf\uff0c\u4fee\u6539\u524d\u81ea\u52a8\u521b\u5efa\u5feb\u7167\u3002",
+            "about.privacyTitle":               "\u6570\u636e\u4e0e\u9690\u79c1",
+            "about.privacyText":                "LazyEnv \u5b8c\u5168\u8fd0\u884c\u5728\u60a8\u7684\u672c\u673a\u4e0a\uff0c\u4e0d\u6536\u96c6\u9065\u6d4b\u6570\u636e\u3001\u4e0d\u53d1\u9001\u4f7f\u7528\u6570\u636e\uff0c\u9664 winget \u4e0b\u8f7d\u5305\u4e4b\u5916\u65e0\u9700\u7f51\u7edc\u8bbf\u95ee\u3002\u5feb\u7167\u548c\u914d\u7f6e\u6570\u636e\u5b58\u50a8\u5728 <code>%LOCALAPPDATA%\\LazyEnv</code> \u76ee\u5f55\u4e0b\uff0c\u60a8\u59cb\u7ec8\u62e5\u6709\u81ea\u5df1\u7684\u6570\u636e\u3002",
+            "about.licenseTitle":               "\u5f00\u6e90\u8bb8\u53ef",
+            "about.licenseText":                "LazyEnv \u662f\u514d\u8d39\u5f00\u6e90\u8f6f\u4ef6\uff0c\u91c7\u7528 <a href=\"https://opensource.org/licenses/MIT\" target=\"_blank\">MIT \u8bb8\u53ef</a>\u3002\u60a8\u53ef\u4ee5\u81ea\u7531\u4f7f\u7528\u3001\u4fee\u6539\u548c\u5206\u53d1\u3002\u6b22\u8fce\u5728 <a href=\"https://github.com/kemoving/LazyEnv\" target=\"_blank\">GitHub</a> \u4e0a\u63d0\u4ea4\u4ee3\u7801\u3001\u53cd\u9988\u95ee\u9898\u548c\u529f\u80fd\u5efa\u8bae\u3002",
+
             // Dialog
             "dialog.cancel":                    "\u53d6\u6d88",
 
@@ -509,6 +563,7 @@
     // -----------------------------------------------------------------------
     // Apply translations to static HTML elements
     // Elements with data-i18n attribute get their textContent replaced.
+    // Elements with data-i18n-html get their innerHTML replaced (allows markup).
     // Elements with data-i18n-placeholder get their placeholder replaced.
     // Elements with data-i18n-title get their title replaced.
     // -----------------------------------------------------------------------
@@ -516,6 +571,10 @@
         document.querySelectorAll("[data-i18n]").forEach(function (el) {
             var key = el.getAttribute("data-i18n");
             if (key) el.textContent = t(key);
+        });
+        document.querySelectorAll("[data-i18n-html]").forEach(function (el) {
+            var key = el.getAttribute("data-i18n-html");
+            if (key) el.innerHTML = t(key);
         });
         document.querySelectorAll("[data-i18n-placeholder]").forEach(function (el) {
             var key = el.getAttribute("data-i18n-placeholder");
