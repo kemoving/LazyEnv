@@ -1165,9 +1165,8 @@ textarea.input {
     border-top: 1px solid var(--border-subtle);
     user-select: text;
     cursor: text;
-    word-break: break-all;
-    overflow-wrap: anywhere;
     white-space: pre-wrap;
+    word-break: break-word;
 }
 
 /* ============================================================================
@@ -1374,25 +1373,26 @@ textarea.input {
 
 /* 命令列 — 完整显示，可选中文本，支持 Ctrl+C 复制 */
 #summaryContent .data-table td:nth-child(3) {
-    word-break: break-all;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     line-height: 1.45;
-    direction: ltr;
-    unicode-bidi: bidi-override;
 }
 
 #summaryContent .cmd-text {
+    display: block;
     font-family: var(--font-mono);
     font-size: 12px;
     user-select: text;
     cursor: text;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
-/* 详情列 — 允许换行但保持可读 */
+/* 详情列 — 单行截断，鼠标悬浮显示完整内容 */
 #summaryContent .data-table td:nth-child(4) {
-    word-break: break-word;
-    overflow-wrap: anywhere;
-    line-height: 1.45;
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ============================================================================

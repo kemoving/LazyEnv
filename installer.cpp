@@ -21,6 +21,7 @@
 
 #include "installer.h"
 #include "rollback.h"   // For environment variable helpers
+#include "debug_log.h"
 
 #include <Windows.h>
 #include <eh.h>         // __try/__except SEH
@@ -89,7 +90,9 @@ InstallResult Installer::installPackage(const PackageInfo& pkg,
         cmd += std::format(" --location \"{}\"", effectiveLocation);
     }
 
+    DBG_LOG("installPackage: id=" << pkg.id << " location=[" << effectiveLocation << "] cmd=[" << cmd << "]");
     result.exitCode = runCommand(cmd, result.output, 600000); // 10 min timeout
+    DBG_LOG("installPackage: id=" << pkg.id << " exitCode=" << result.exitCode);
 
     if (result.exitCode == 0) {
         result.status = InstallStatus::Success;
@@ -280,19 +283,28 @@ bool launchProcess(const std::string& cmdLine, HANDLE hWritePipe,
     // cmd.exe strips quotes from arguments when launching child processes,
     // which breaks paths containing spaces (e.g. --location "E:\Program Files").
     // winget and where are standalone executables; CreateProcessW searches PATH.
+    DBG_LOG("launchProcess: [" << cmdLine << "]");
     int wlen = MultiByteToWideChar(CP_UTF8, 0, cmdLine.c_str(),
                                    static_cast<int>(cmdLine.size()), nullptr, 0);
-    if (wlen <= 0) return false;
+    if (wlen <= 0) {
+        DBG_LOG("launchProcess: MultiByteToWideChar FAILED");
+        return false;
+    }
     std::wstring wcmd(wlen, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, cmdLine.c_str(),
                         static_cast<int>(cmdLine.size()), wcmd.data(), wlen);
 
-    return CreateProcessW(
+    BOOL created = CreateProcessW(
         nullptr, wcmd.data(),
         nullptr, nullptr, TRUE,
         CREATE_NO_WINDOW,
         nullptr, nullptr,
-        &si, &pi) != 0;
+        &si, &pi);
+    if (!created) {
+        DBG_LOG("launchProcess: CreateProcessW FAILED, GLE=" << GetLastError()
+                << " cmd=[" << cmdLine << "]");
+    }
+    return created != 0;
 }
 
 // ---------------------------------------------------------------------------

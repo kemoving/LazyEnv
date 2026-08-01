@@ -69,13 +69,22 @@ private:
         wchar_t tmp[MAX_PATH];
         if (GetTempPathW(MAX_PATH, tmp)) {
             std::wstring path = std::wstring(tmp) + L"LazyEnv_debug.log";
+            // Truncate old log so each session starts clean
+            {
+                std::ofstream clearer(path, std::ios::trunc);
+            }
             file_.open(path, std::ios::app);
             if (file_.is_open()) {
-                std::string header = std::format(
-                    "\n=== LazyEnv Debug Log (pid={}) ===\n",
-                    GetCurrentProcessId());
-                file_ << header;
-                OutputDebugStringA(header.c_str());
+                auto tt = std::chrono::system_clock::to_time_t(
+                    std::chrono::system_clock::now());
+                tm local{};
+                localtime_s(&local, &tt);
+                char ts[64];
+                strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &local);
+                file_ << std::format(
+                    "=== LazyEnv Debug Log (pid={}, session={}) ===\n",
+                    GetCurrentProcessId(), ts);
+                file_.flush();
             }
         }
     }
