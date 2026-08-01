@@ -65,7 +65,6 @@ static lazyenv::RollbackManager g_rollback;
 static HWND                     g_mainWindow = nullptr;
 static bool                     g_isMaximized    = false;
 static RECT                     g_normalRect     = {};    // saved before "fake maximize"
-static RECT                     g_preMinimizeRect = {};   // saved before minimize
 
 // ---------------------------------------------------------------------------
 // JSON helpers
@@ -381,15 +380,6 @@ std::string handleWebMessage(const std::string& message) {
 
     // ------ Window controls ------
     if (action == "windowMinimize") {
-        // Snapshot the exact window rect BEFORE minimizing so we can
-        // explicitly restore it in WM_SIZE (DWMWA_TRANSITIONS_FORCEDISABLED
-        // may cause Windows to pick a wrong default restore position).
-        GetWindowRect(g_mainWindow, &g_preMinimizeRect);
-        DBG_LOG("MINIMIZE: saved preMin={" << g_preMinimizeRect.left << "," << g_preMinimizeRect.top
-                << "," << g_preMinimizeRect.right << "," << g_preMinimizeRect.bottom
-                << "} size=" << (g_preMinimizeRect.right - g_preMinimizeRect.left) << "x"
-                << (g_preMinimizeRect.bottom - g_preMinimizeRect.top)
-                << " isMax=" << (g_isMaximized ? "1" : "0"));
         ShowWindow(g_mainWindow, SW_MINIMIZE);
         return "";
     }
@@ -1303,36 +1293,6 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
 
-        {
-            // Pre-resize diagnostics
-            RECT cr{}, wr{};
-            GetClientRect(hwnd, &cr);
-            GetWindowRect(hwnd, &wr);
-            const char* szName = (wParam == SIZE_RESTORED)  ? "RESTORED" :
-                                 (wParam == SIZE_MAXIMIZED) ? "MAXIMIZED" :
-                                 (wParam == SIZE_MAXSHOW)   ? "MAXSHOW"  : "OTHER";
-            bool hasPreMin = !IsRectEmpty(&g_preMinimizeRect);
-            DBG_LOG("WM_SIZE: " << szName << " (wParam=" << (int)wParam << ")"
-                    << " client=" << (cr.right-cr.left) << "x" << (cr.bottom-cr.top)
-                    << " window={" << wr.left << "," << wr.top << "," << wr.right << "," << wr.bottom << "}"
-                    << " preMinEmpty=" << (hasPreMin ? "0" : "1")
-                    << " isMax=" << (g_isMaximized ? "1" : "0"));
-        }
-
-        // --- Restore from minimized ---
-        // ShowWindow(SW_MINIMIZE) / taskbar-restore uses Windows' native
-        // position tracking, so the window is already in the correct place
-        // when SIZE_RESTORED fires.  We simply clear the saved rect flag
-        // — no manual SetWindowPos needed.
-        //
-        // For maximize↔normal transitions, windowMaximize() uses its own
-        // SetWindowPos which will fire a separate WM_SIZE that is handled
-        // normally below.
-        if (wParam == SIZE_RESTORED && !IsRectEmpty(&g_preMinimizeRect)) {
-            DBG_LOG("WM_SIZE: clearing preMinimizeRect");
-            SetRectEmpty(&g_preMinimizeRect);
-        }
-
         g_webview.resize();
 
         if (g_webview.getController()) {
@@ -1352,7 +1312,8 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_DPICHANGED: {
         // lParam points to a RECT with the suggested new window size/position
-        // for the new DPI. Apply it, then resize WebView2 so its scale updates.
+        // for the new DPI. SetWindowPos sends WM_SIZE synchronously, which
+        // already calls g_webview.resize() — no need to call it again here.
         auto* const suggestedRect = reinterpret_cast<RECT*>(lParam);
         SetWindowPos(hwnd, nullptr,
                      suggestedRect->left,
@@ -1360,7 +1321,6 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                      suggestedRect->right - suggestedRect->left,
                      suggestedRect->bottom - suggestedRect->top,
                      SWP_NOZORDER | SWP_NOACTIVATE);
-        g_webview.resize();
         return 0;
     }
 

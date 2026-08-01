@@ -290,30 +290,18 @@
                 break;
 
             case "windowState":
-                dbgLog("windowState RECEIVED: max=" + d.maximized
-                       + " width=" + d.width + " height=" + d.height
-                       + " window.inner=" + window.innerWidth + "x" + window.innerHeight);
+                dbgLog("windowState: max=" + d.maximized
+                       + " inner=" + window.innerWidth + "x" + window.innerHeight);
                 isMaximized = d.maximized;
                 updateMaxBtn();
-                // Use native client-area dimensions — unaffected by
-                // WebView2 viewport caching.
-                if (typeof d.width === "number" && typeof d.height === "number") {
-                    setViewportVars(d.width, d.height);
-                    // Synchronous, non-visual layout trigger.
-                    // After setViewportVars updates --vh/--vw the CSS
-                    // engine may defer the recalc until the next frame.
-                    // Reading offsetHeight forces an immediate layout so
-                    // the restored window paints at the correct size on
-                    // its very first frame (critical after minimize).
-                    var app = document.querySelector(".app");
-                    if (app) {
-                        void app.offsetHeight;
-                        var style = window.getComputedStyle(app);
-                        dbgLog("windowState after reflow: .app computed=" + style.width + "x" + style.height
-                               + " offsetHeight=" + app.offsetHeight
-                               + " --vh=" + getComputedStyle(document.documentElement).getPropertyValue("--vh"));
-                    }
-                }
+                // Signal reflow. After minimize→restore the CSS viewport
+                // may not change size, so no 'resize' event fires — this
+                // guarantees --vh/--vw are current. Uses window.inner*
+                // (CSS pixels), never the physical-pixel values from C++.
+                // On size-change transitions (maximize/custom resize),
+                // the 'resize' event + ResizeObserver also call
+                // triggerReflow(); rAF throttling prevents double work.
+                triggerReflow();
                 break;
 
             case "uninstallResult":
