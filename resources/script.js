@@ -255,10 +255,17 @@
                 isMaximized = d.maximized;
                 updateMaxBtn();
                 // Use native client-area dimensions — unaffected by
-                // WebView2 viewport caching. ResizeObserver handles
-                // the reflow naturally after the compositor settles.
+                // WebView2 viewport caching.
                 if (typeof d.width === "number" && typeof d.height === "number") {
                     setViewportVars(d.width, d.height);
+                    // Synchronous, non-visual layout trigger.
+                    // After setViewportVars updates --vh/--vw the CSS
+                    // engine may defer the recalc until the next frame.
+                    // Reading offsetHeight forces an immediate layout so
+                    // the restored window paints at the correct size on
+                    // its very first frame (critical after minimize).
+                    var app = document.querySelector(".app");
+                    if (app) void app.offsetHeight;
                 }
                 break;
 

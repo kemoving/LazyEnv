@@ -63,7 +63,6 @@ static lazyenv::RollbackManager g_rollback;
 // g_msgMutex is no longer needed; postMessage is now thread-safe via message queue
 static HWND                     g_mainWindow = nullptr;
 static bool                     g_isMaximized    = false;
-static bool                     g_inRestoreFix   = false; // re-entry guard for WM_SIZE
 static RECT                     g_normalRect     = {};    // saved before "fake maximize"
 static RECT                     g_preMinimizeRect = {};   // saved before minimize
 
@@ -1283,16 +1282,31 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_SIZE: {
-        // --- Restore from minimized ---
-        // DWMWA_TRANSITIONS_FORCEDISABLED stops DWM animation from
-        // overriding our position, but Windows may calculate a wrong
-        // default restore position for WS_POPUP windows.  We bypass
-        // that entirely by saving the rect before minimize and
-        // explicitly repositioning here.
-        if (wParam == SIZE_RESTORED && !IsRectEmpty(&g_preMinimizeRect) && !g_inRestoreFix) {
-            g_inRestoreFix = true;
+        // --- Critical: NEVER call resize() when minimized ---
+        // When minimized, GetClientRect returns a tiny rect (~160x28),
+        // and put_Bounds with that rect collapses the WebView2 renderer.
+        // The HTML layout recalculates for the tiny viewport, which can
+        // corrupt internal rendering state.  On restore the WebView2 may
+        // then fail to fully recover, leaving the bottom clipped.
+        if (wParam == SIZE_MINIMIZED) {
+            return 0;
+        }
+
+        // --- Reposition before resize ---
+        // When restoring from minimized, Windows may pick a wrong default
+        // position for WS_POPUP windows (DWMWA_TRANSITIONS_FORCEDISABLED
+        // disables the DWM animation that would normally correct this).
+        // We reposition BEFORE resize() so that GetClientRect inside
+        // resize() already sees the correct final dimensions.
+        //
+        // g_preMinimizeRect is cleared immediately to prevent re-entry:
+        // SetWindowPos (on the maximized path) may send another WM_SIZE,
+        // and clearing the rect ensures the nested handler won't try to
+        // reposition again, avoiding infinite recursion.
+        if (wParam == SIZE_RESTORED && !IsRectEmpty(&g_preMinimizeRect)) {
+            RECT saved = g_preMinimizeRect;
+            SetRectEmpty(&g_preMinimizeRect);  // one-shot: clear BEFORE SetWindowPos
             if (g_isMaximized) {
-                // Fake-maximized → fill the current monitor work area
                 HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
                 MONITORINFO mi{};
                 mi.cbSize = sizeof(mi);
@@ -1301,22 +1315,23 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                                  mi.rcWork.left, mi.rcWork.top,
                                  mi.rcWork.right  - mi.rcWork.left,
                                  mi.rcWork.bottom - mi.rcWork.top,
-                                 SWP_NOZORDER | SWP_NOACTIVATE);
-                    // Secondary defence for pre-Win10-1803 systems where
-                    // DWMWA_TRANSITIONS_FORCEDISABLED is silently ignored.
+                                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+                    // Belts-and-suspenders for pre-Win10-1803 (DWMWA_TRANSITIONS_FORCEDISABLED ignored)
                     PostMessageW(hwnd, lazyenv::WM_REAPPLY_MAXIMIZE, 0, 0);
                 }
             } else {
-                // Normal window → restore to exact pre-minimize rect
                 SetWindowPos(hwnd, nullptr,
-                             g_preMinimizeRect.left, g_preMinimizeRect.top,
-                             g_preMinimizeRect.right  - g_preMinimizeRect.left,
-                             g_preMinimizeRect.bottom - g_preMinimizeRect.top,
-                             SWP_NOZORDER | SWP_NOACTIVATE);
+                             saved.left, saved.top,
+                             saved.right  - saved.left,
+                             saved.bottom - saved.top,
+                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
             }
-            g_inRestoreFix = false;
         }
+
+        // Now resize WebView2 — GetClientRect already reflects the correct
+        // dimensions after the reposition above.
         g_webview.resize();
+
         if (g_webview.getController()) {
             RECT cr{};
             GetClientRect(hwnd, &cr);
