@@ -368,7 +368,7 @@ std::string handleWebMessage(const std::string& message) {
     try {
         // ------ Debug log bridge (JS -> native log file) ------
         if (action == "debugLog") {
-            std::string msg = jsonGetStr(root, "msg");
+            std::string msg = extractJsonValue(message, "msg");
             DBG_LOG("[JS] " << msg);
             return "";
         }

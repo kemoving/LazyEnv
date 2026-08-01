@@ -16,6 +16,7 @@
 #include <chrono>
 #include <fstream>
 #include <format>
+#include <sstream>
 #include <string>
 
 namespace lazyenv::debug {
@@ -86,11 +87,12 @@ private:
 
 } // namespace lazyenv::debug
 
-// Convenience macro — appends timestamp + newline automatically
+// Convenience macro — uses ostringstream to allow stream-style expressions
 #define DBG_LOG(expr)                                             \
     do {                                                          \
         try {                                                     \
-            lazyenv::debug::Logger::instance().write(             \
-                std::format("{}", expr));                         \
+            std::ostringstream _dbg_oss;                           \
+            _dbg_oss << expr;                                     \
+            lazyenv::debug::Logger::instance().write(_dbg_oss.str()); \
         } catch (...) {}                                          \
     } while (0)
