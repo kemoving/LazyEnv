@@ -354,6 +354,19 @@ static DWORD waitForProcessExit(HANDLE hProcess, DWORD timeoutMs) {
     return exitCode;
 }
 
+// SEH-safe ReadFile wrapper — pure C types, no C++ objects.
+// Returns bytes read; returns 0 on SEH exception or ReadFile failure.
+static DWORD sehSafeReadFile(HANDLE hFile, char* buffer, DWORD bufferSize) {
+    DWORD bytesRead = 0;
+    __try {
+        if (!ReadFile(hFile, buffer, bufferSize, &bytesRead, nullptr))
+            bytesRead = 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        bytesRead = 0;
+    }
+    return bytesRead;
+}
+
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
@@ -438,20 +451,15 @@ int Installer::runCommandStreaming(const std::string& cmdLine,
     std::string        rawOutput;
     std::mutex         outputMutex;
     std::atomic<bool>  readerDone{false};
-    bool               readerOk = true;
 
     std::thread reader([&]() {
-        // SEH-safe chunked pipe read
-        __try {
-            char buf[4096];
-            DWORD bytesRead = 0;
-            while (ReadFile(ph.hRead, buf, sizeof(buf), &bytesRead, nullptr) &&
-                   bytesRead > 0) {
-                std::lock_guard<std::mutex> lock(outputMutex);
-                rawOutput.append(buf, bytesRead);
-            }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            readerOk = false;
+        char buf[4096];
+        DWORD bytesRead;
+        // SEH protection is inside sehSafeReadFile — no __try needed here,
+        // keeping this lambda compatible with C++ object unwinding.
+        while ((bytesRead = sehSafeReadFile(ph.hRead, buf, sizeof(buf))) > 0) {
+            std::lock_guard<std::mutex> lock(outputMutex);
+            rawOutput.append(buf, bytesRead);
         }
         readerDone.store(true);
     });
@@ -507,12 +515,6 @@ int Installer::runCommandStreaming(const std::string& cmdLine,
 
     reader.join();
     CloseHandle(ph.hRead);
-
-    if (!readerOk) {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        return -2;
-    }
 
     DWORD exitCode = waitForProcessExit(pi.hProcess, timeoutMs);
     CloseHandle(pi.hProcess);
