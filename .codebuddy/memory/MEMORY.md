@@ -60,12 +60,7 @@ resources/        — index.html, style.css, script.js, i18n.js
 ## 代码位置
 - 主仓库: `https://github.com/kemoving/LazyEnv`
 
-## 已知修复
-- **伪最大化→最小化→恢复后底部被任务栏遮挡 (最终修复)**:
-  - 根因: DWM 恢复动画异步运行在 dwm.exe，会覆盖 `PostMessage` 延迟做的 `SetWindowPos` 修复
-  - 修复: `CreateWindowExW` 后用 `DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, TRUE)` 禁用窗口过渡动画，窗口恢复时直接显示在 rcWork 位置
-  - 兜底: 保留 `WM_SIZE(SIZE_RESTORED)` → `PostMessage(WM_REAPPLY_MAXIMIZE)` → `DwmFlush()` + `SetWindowPos` 的双层安全网
-- 常量 `DWMWA_TRANSITIONS_FORCEDISABLED = 3` 在 `main.cpp` 中以 `#ifndef` 兜底定义 (Win10 1803+)
+
 
 ## 用户偏好
-- 不创建日期命名的 memory 文件（如 `YYYY-MM-DD.md`），重要信息直接写入 MEMORY.md
+- 不创建日期命名的 memory 文件（如 `YYYY-MM-DD.md`）不要在写入 MEMORY.md  ，后续都不记录了
