@@ -27,7 +27,10 @@
 
 #include <sstream>
 #include <algorithm>
+#include <atomic>
 #include <format>
+#include <mutex>
+#include <thread>
 #include <cstdio>
 
 namespace lazyenv {
@@ -400,35 +403,12 @@ int Installer::runCommand(const std::string& cmdLine,
 // ---------------------------------------------------------------------------
 // Streaming command execution with line-by-line callback
 //
-// Split into two layers:
-// 1. sehReadPipeRaw  — pure-C ReadFile loop in __try/__except
-// 2. runCommandStreaming — post-processes raw bytes into lines (no I/O, safe)
+// Architecture:
+//   Reader thread — SEH-safe chunked pipe reads, appends to shared buffer.
+//   Main thread   — polls buffer, splits lines, fires onLine callbacks in real-time.
+// This avoids the old batch-read deadlock: winget can take minutes to download,
+// but we now stream each line as it arrives instead of waiting for process exit.
 // ---------------------------------------------------------------------------
-namespace {
-
-// Pure C: read raw bytes from pipe into fixed buffer. __try-safe.
-static bool sehReadPipeRaw(HANDLE hRead, char* outBuf, DWORD bufCapacity, DWORD* outLen) {
-    bool ok = false;
-    __try {
-        *outLen = 0;
-        DWORD bytesRead = 0;
-        while (*outLen + 4096 <= bufCapacity &&
-               ReadFile(hRead, outBuf + *outLen, 4096, &bytesRead, nullptr) &&
-               bytesRead > 0) {
-            *outLen += bytesRead;
-        }
-        outBuf[*outLen] = '\0';
-        ok = true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        // See sehReadPipeLoop above: do not write outBuf[*outLen] here —
-        // it may trigger a double fault if the original AV corrupted *outLen.
-        ok = false;
-    }
-    return ok;
-}
-
-} // anonymous namespace
-
 int Installer::runCommandStreaming(const std::string& cmdLine,
                                   std::string& fullOutput,
                                   LineCallback onLine,
@@ -446,46 +426,84 @@ int Installer::runCommandStreaming(const std::string& cmdLine,
     }
     CloseHandle(ph.hWrite);
 
-    // SEH-safe read into a fixed-size stack buffer
-    char rawBuf[65536];
-    DWORD rawLen = 0;
-    bool readOk = sehReadPipeRaw(ph.hRead, rawBuf, sizeof(rawBuf) - 1, &rawLen);
-    CloseHandle(ph.hRead);
+    // Shared state — reader thread writes raw bytes, main thread consumes lines
+    std::string        rawOutput;
+    std::mutex         outputMutex;
+    std::atomic<bool>  readerDone{false};
+    bool               readerOk = true;
 
-    if (!readOk) {
-        // SEH caught an exception during I/O — save what we got.
-        // Clamp rawLen to buffer capacity to guard against corruption.
-        const DWORD kMaxBuf = static_cast<DWORD>(sizeof(rawBuf));
-        if (rawLen > 0 && rawLen <= kMaxBuf) {
-            rawBuf[rawLen] = '\0';
-            fullOutput.assign(rawBuf, rawLen);
+    std::thread reader([&]() {
+        // SEH-safe chunked pipe read
+        __try {
+            char buf[4096];
+            DWORD bytesRead = 0;
+            while (ReadFile(ph.hRead, buf, sizeof(buf), &bytesRead, nullptr) &&
+                   bytesRead > 0) {
+                std::lock_guard<std::mutex> lock(outputMutex);
+                rawOutput.append(buf, bytesRead);
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            readerOk = false;
         }
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        return -2;
+        readerDone.store(true);
+    });
+
+    // Main thread: process lines incrementally — no SEH context, safe for callbacks
+    std::string lineBuffer;
+    size_t      consumed = 0;
+
+    while (!readerDone.load()) {
+        {
+            std::lock_guard<std::mutex> lock(outputMutex);
+            while (consumed < rawOutput.size()) {
+                char ch = rawOutput[consumed++];
+                if (ch == '\n') {
+                    if (!lineBuffer.empty() && lineBuffer.back() == '\r')
+                        lineBuffer.pop_back();
+                    if (!lineBuffer.empty() && onLine)
+                        onLine(lineBuffer);
+                    lineBuffer.clear();
+                } else {
+                    lineBuffer += ch;
+                }
+            }
+        }
+        Sleep(50);  // Avoid busy-wait; winget outputs every few seconds
     }
 
-    fullOutput.assign(rawBuf, rawLen);
-
-    // Split raw output into lines and invoke callback (C++ code, safe)
-    if (onLine) {
-        std::string lineBuffer;
-        for (DWORD i = 0; i < rawLen; ++i) {
-            if (rawBuf[i] == '\n') {
+    // Drain remaining bytes after reader exits
+    {
+        std::lock_guard<std::mutex> lock(outputMutex);
+        while (consumed < rawOutput.size()) {
+            char ch = rawOutput[consumed++];
+            if (ch == '\n') {
                 if (!lineBuffer.empty() && lineBuffer.back() == '\r')
                     lineBuffer.pop_back();
-                if (!lineBuffer.empty())
+                if (!lineBuffer.empty() && onLine)
                     onLine(lineBuffer);
                 lineBuffer.clear();
             } else {
-                lineBuffer += rawBuf[i];
+                lineBuffer += ch;
             }
         }
-        if (!lineBuffer.empty()) {
-            if (lineBuffer.back() == '\r') lineBuffer.pop_back();
-            if (!lineBuffer.empty())
-                onLine(lineBuffer);
-        }
+    }
+
+    // Flush final partial line
+    if (!lineBuffer.empty()) {
+        if (lineBuffer.back() == '\r') lineBuffer.pop_back();
+        if (!lineBuffer.empty() && onLine)
+            onLine(lineBuffer);
+    }
+
+    fullOutput = rawOutput;
+
+    reader.join();
+    CloseHandle(ph.hRead);
+
+    if (!readerOk) {
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        return -2;
     }
 
     DWORD exitCode = waitForProcessExit(pi.hProcess, timeoutMs);

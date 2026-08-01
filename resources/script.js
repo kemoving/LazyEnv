@@ -1313,8 +1313,10 @@
             }
 
             var pkgIcon = window.LazyEnvIcons.getIcon(id || name, pkg ? pkg.category : "");
-            html += '<div class="install-item' + cls + '" data-pkg-id="' + esc(id) + '">';
-            html += '<div class="card-row">';
+            var itemCls = "install-item" + cls;
+            if (r.status === "running") itemCls += " install-item--expanded";
+            html += '<div class="' + itemCls + '" data-pkg-id="' + esc(id) + '">';
+            html += '<div class="card-row install-item__header">';
             html += '<div class="card-row__icon">' + pkgIcon + '</div>';
             html += '<div class="card-row__status">' + iconHtml + '</div>';
             html += '<div class="card-row__body">';
@@ -1360,6 +1362,14 @@
                 installLogs.set(pkgId, []);
                 renderInstallList();
                 sendNative({ action: "retryInstall", packageId: pkgId, installLocation: currentInstallLocation });
+            });
+        });
+
+        // Click header to toggle log expand/collapse
+        list.querySelectorAll(".install-item__header").forEach(function (header) {
+            header.addEventListener("click", function () {
+                var item = this.closest(".install-item");
+                if (item) item.classList.toggle("install-item--expanded");
             });
         });
 
@@ -1557,34 +1567,71 @@
         showDialogRaw(title, '<p>' + esc(message) + '</p>', buttons);
     }
 
-    function showDialogRaw(title, bodyHtml, buttons, dialogClass) {
+    // Dialog stack: supports nested dialogs (e.g. diff detail over diff list).
+    // When a new dialog is shown while one is already visible, the current
+    // dialog's render function is pushed to the stack. When the new dialog is
+    // closed, the previous dialog is restored from the stack. This lets users
+    // open a detail view, close it, and seamlessly return to the previous
+    // dialog (e.g. the diff list) without losing their work.
+    var _dialogStack = [];
+    var _currentDialogRender = null;
+
+    function showDialogRaw(title, bodyHtml, buttons, dialogClass, renderExtra) {
         var overlay = document.getElementById("dialogOverlay");
         var dialog = overlay.querySelector(".dialog");
-        document.getElementById("dialogTitle").textContent = title;
-        document.getElementById("dialogBody").innerHTML = bodyHtml;
 
-        // Toggle dialog width class
-        dialog.classList.remove("dialog--wide");
-        if (dialogClass) dialog.classList.add(dialogClass);
+        // If a dialog is already visible, save its render function to the stack
+        if (overlay.classList.contains("dialog-overlay--visible")) {
+            _dialogStack.push(_currentDialogRender);
+        }
 
-        var footer = document.getElementById("dialogFooter");
-        footer.innerHTML = "";
-        buttons.forEach(function (b) {
-            var btn = document.createElement("button");
-            btn.className = "btn " + (b.cls || "");
-            if (b.id) btn.id = b.id;
-            btn.textContent = b.text;
-            btn.addEventListener("click", function () {
-                if (b.action) {
-                    var result = b.action();
-                    if (result === false) return; // prevent close
-                }
-                overlay.classList.remove("dialog-overlay--visible");
+        _currentDialogRender = function () {
+            document.getElementById("dialogTitle").textContent = title;
+            document.getElementById("dialogBody").innerHTML = bodyHtml;
+
+            // Toggle dialog width class
+            dialog.classList.remove("dialog--wide");
+            if (dialogClass) dialog.classList.add(dialogClass);
+
+            var footer = document.getElementById("dialogFooter");
+            footer.innerHTML = "";
+            buttons.forEach(function (b) {
+                var btn = document.createElement("button");
+                btn.className = "btn " + (b.cls || "");
+                if (b.id) btn.id = b.id;
+                btn.textContent = b.text;
+                btn.addEventListener("click", function () {
+                    if (b.action) {
+                        var result = b.action();
+                        if (result === false) return; // prevent close
+                    }
+                    _closeTopDialog();
+                });
+                footer.appendChild(btn);
             });
-            footer.appendChild(btn);
-        });
 
+            // Allow the caller to re-attach event listeners / set up DOM
+            // references that depend on the just-rendered body. This is
+            // invoked both on the initial show AND when the dialog is
+            // restored from the stack after a child dialog closes.
+            if (renderExtra) renderExtra();
+        };
+
+        _currentDialogRender();
         overlay.classList.add("dialog-overlay--visible");
+    }
+
+    // Close the topmost dialog. If there's a stacked dialog underneath,
+    // re-render it; otherwise hide the overlay.
+    function _closeTopDialog() {
+        var overlay = document.getElementById("dialogOverlay");
+        if (_dialogStack.length > 0) {
+            _currentDialogRender = _dialogStack.pop();
+            _currentDialogRender();
+        } else {
+            _currentDialogRender = null;
+            overlay.classList.remove("dialog-overlay--visible");
+        }
     }
 
     // Change-type label map (shared by showDiffDialog & showDiffDetailDialog)
@@ -1786,9 +1833,15 @@
                     '<div class="dialog-warning__text">' + esc(t("recovery.fullRestoreHint") || "Full Restore will replace ALL current variables with the snapshot values. This cannot be undone.") + '</div>' +
                     '</div>',
                     [
-                        { text: t("dialog.cancel"), cls: "", action: function () { showDiffDialog(snapshotId, diffs); return false; } },
+                        // Cancel: just close. The dialog stack will automatically
+                        // restore the parent diff dialog that opened this confirm.
+                        { text: t("dialog.cancel"), cls: "" },
                         { text: t("recovery.btnRestoreFull") || "Full Restore", cls: "btn--danger", action: function () {
                             sendNative({ action: "restoreSnapshot", snapshotId: snapshotId, mode: "full" });
+                            // Clear the entire dialog stack so the user returns
+                            // to the recovery page rather than the diff dialog
+                            // after the restore completes.
+                            _dialogStack.length = 0;
                         } }
                     ]
                 );
@@ -1833,6 +1886,10 @@
                         mode: "incremental",
                         names: names
                     });
+                    // Clear the dialog stack so the user returns to the
+                    // recovery page rather than the diff dialog after the
+                    // incremental restore completes.
+                    _dialogStack.length = 0;
                 }
             });
         }
@@ -1841,71 +1898,59 @@
 
         var dialogTitleText = hasDiffs ? (t("recovery.diffTitle") || "Changed Variables")
                                        : (t("recovery.diffEmptyTitle") || "Restore Snapshot");
-        showDialogRaw(dialogTitleText, html, buttons, "dialog--wide");
+        // The renderExtra callback is invoked both on the initial show AND when
+        // this dialog is restored from the stack after a child dialog (e.g. the
+        // per-variable detail view) closes. Re-binding event listeners inside the
+        // callback ensures they survive a restore.
+        showDialogRaw(dialogTitleText, html, buttons, "dialog--wide", function () {
+            // Inject warning hint into dialog header (same line as title)
+            var titleEl = document.getElementById("dialogTitle");
+            if (titleEl) {
+                var hintText = t("recovery.fullRestoreHint") || "Full Restore will replace ALL current variables with the snapshot values. This cannot be undone.";
+                titleEl.innerHTML = esc(dialogTitleText) + '<span class="dialog-title-hint" title="' + esc(hintText) + '">' + esc(hintText) + '</span>';
+            }
 
-        // Inject warning hint into dialog header (same line as title)
-        var titleEl = document.getElementById("dialogTitle");
-        if (titleEl) {
-            var hintText = t("recovery.fullRestoreHint") || "Full Restore will replace ALL current variables with the snapshot values. This cannot be undone.";
-            titleEl.innerHTML = esc(dialogTitleText) + '<span class="dialog-title-hint" title="' + esc(hintText) + '">' + esc(hintText) + '</span>';
-        }
+            // After DOM is built, grab the toggle button ref so we can update its text later
+            selectAllBtn = document.getElementById("btnToggleAll");
 
-        // After DOM is built, grab the toggle button ref so we can update its text later
-        selectAllBtn = document.getElementById("btnToggleAll");
-
-        // Sync toggle button label when user manually checks/unchecks individual items
-        if (hasDiffs) {
-            var diffChecks = document.querySelectorAll(".diff-check");
-            console.log("[diffDebug] Found .diff-check count:", diffChecks.length);
-            diffChecks.forEach(function (chk) {
-                chk.addEventListener("change", function () {
-                    var total = document.querySelectorAll(".diff-check").length;
-                    var checked = document.querySelectorAll(".diff-check:checked").length;
-                    allSelected = (checked === total);
-                    syncSelectAllBtn();
-                });
-            });
-
-            // View-detail button — use mousedown to fire BEFORE the label grabs the click
-            var detailBtns = document.querySelectorAll(".diff-detail-btn");
-            console.log("[diffDebug] Found .diff-detail-btn count:", detailBtns.length);
-            detailBtns.forEach(function (btn, idx) {
-                var row = btn.closest(".diff-item");
-                var dbgName = row ? (row.getAttribute("data-dbg-name") || row.querySelector(".diff-name").textContent) : "???";
-                console.log("[diffDebug] btn#" + idx + " in row:", dbgName);
-
-                btn.addEventListener("mousedown", function (e) {
-                    console.log("[diffDebug] mousedown FIRED on btn, target:", e.target.tagName, ".", e.target.className);
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    var parentRow = btn.closest(".diff-item");
-                    console.log("[diffDebug] closest .diff-item:", parentRow ? parentRow.tagName : null);
-                    if (!parentRow) return;
-
-                    var name = parentRow.querySelector(".diff-name").textContent;
-                    console.log("[diffDebug] name from DOM:", name);
-                    console.log("[diffDebug] diffs array length:", diffs.length);
-
-                    var item = diffs.find(function (d, i) {
-                        var match = d.name === name;
-                        if (i < 3) console.log("[diffDebug] diffs[" + i + "].name:", d.name, "match:", match);
-                        return match;
+            // Sync toggle button label when user manually checks/unchecks individual items
+            if (hasDiffs) {
+                var diffChecks = document.querySelectorAll(".diff-check");
+                diffChecks.forEach(function (chk) {
+                    chk.addEventListener("change", function () {
+                        var total = document.querySelectorAll(".diff-check").length;
+                        var checked = document.querySelectorAll(".diff-check:checked").length;
+                        allSelected = (checked === total);
+                        syncSelectAllBtn();
                     });
-                    if (!item) {
-                        console.warn("[diffDebug] FAILED to find diff item for name:", name);
-                        return;
-                    }
-                    console.log("[diffDebug] Found diff item:", item.name, item.changeType, "isSystem:", !!item.system);
-                    console.log("[diffDebug] Calling showDiffDetailDialog...");
-                    showDiffDetailDialog(item.name, item.currentValue, item.snapshotValue, item.changeType, !!item.system);
                 });
-            });
-        }
+
+                // View-detail button — use mousedown to fire BEFORE the label grabs the click
+                var detailBtns = document.querySelectorAll(".diff-detail-btn");
+                detailBtns.forEach(function (btn) {
+                    btn.addEventListener("mousedown", function (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        var parentRow = btn.closest(".diff-item");
+                        if (!parentRow) return;
+
+                        var name = parentRow.querySelector(".diff-name").textContent;
+                        var item = diffs.find(function (d) { return d.name === name; });
+                        if (!item) return;
+
+                        showDiffDetailDialog(item.name, item.currentValue, item.snapshotValue, item.changeType, !!item.system);
+                    });
+                });
+            }
+        });
     }
 
     document.getElementById("dialogOverlay").addEventListener("click", function (e) {
-        if (e.target === this) this.classList.remove("dialog-overlay--visible");
+        // Click on the dimmed backdrop (not the dialog itself) closes the
+        // topmost dialog. If a child dialog is open, this restores the
+        // parent dialog from the stack rather than hiding the overlay.
+        if (e.target === this) _closeTopDialog();
     });
 
     // -----------------------------------------------------------------------
