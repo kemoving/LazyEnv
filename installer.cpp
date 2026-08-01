@@ -279,7 +279,15 @@ bool launchProcess(const std::string& cmdLine, HANDLE hWritePipe,
     si.hStdError  = hWritePipe;
     si.wShowWindow = SW_HIDE;
 
-    std::string fullCmd = "cmd /c " + cmdLine;
+    // Escape double quotes so cmd /c preserves them.
+    // Without this, paths like "E:\Program Files\devltools\..." lose quotes
+    // when passed through cmd.exe, causing winget to see E:\Program as the path.
+    std::string escapedCmdLine;
+    for (size_t i = 0; i < cmdLine.size(); ++i) {
+        if (cmdLine[i] == '"') escapedCmdLine += '\\';
+        escapedCmdLine += cmdLine[i];
+    }
+    std::string fullCmd = "cmd /c \"" + escapedCmdLine + "\"";
     int wlen = MultiByteToWideChar(CP_UTF8, 0, fullCmd.c_str(),
                                    static_cast<int>(fullCmd.size()), nullptr, 0);
     if (wlen <= 0) return false;
