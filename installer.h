@@ -120,6 +120,16 @@ private:
 };
 
 // ----------------------------------------------------------------------------
+// Install location helpers
+// ----------------------------------------------------------------------------
+
+// Resolve a base install location into a package-specific directory.
+// When baseLocation is empty, returns empty. Otherwise returns
+// baseLocation\<sanitizedDisplayName> so each package gets its own folder.
+std::string makePackageInstallLocation(const std::string& baseLocation,
+                                       const std::string& packageDisplayName);
+
+// ----------------------------------------------------------------------------
 // Built-in package catalog
 // Provides a curated list of common development tools.
 // ----------------------------------------------------------------------------

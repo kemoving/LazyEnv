@@ -562,9 +562,13 @@ std::string handleWebMessage(const std::string& message) {
                     "--accept-package-agreements --accept-source-agreements",
                     pkg.id);
 
-                // Append custom install location if specified
+                // Append custom install location if specified.
+                // Each package gets its own subfolder under the base path.
+                std::string effectiveLocation;
                 if (!installLocation.empty()) {
-                    cmdLine += std::format(" --location \"{}\"", installLocation);
+                    effectiveLocation = lazyenv::makePackageInstallLocation(
+                        installLocation, pkg.displayName);
+                    cmdLine += std::format(" --location \"{}\"", effectiveLocation);
                 }
 
                 // Send "running" status
@@ -599,8 +603,8 @@ std::string handleWebMessage(const std::string& message) {
                 if (exitCode == 0) {
                     statusStr = "success";
                     if (pkg.addToPath) {
-                        if (!installLocation.empty())
-                            lazyenv::Installer::addToUserPath(installLocation);
+                        if (!effectiveLocation.empty())
+                            lazyenv::Installer::addToUserPath(effectiveLocation);
                         else if (!pkg.defaultPath.empty())
                             lazyenv::Installer::addToUserPath(pkg.defaultPath);
                     }
@@ -675,9 +679,13 @@ std::string handleWebMessage(const std::string& message) {
                 "--accept-package-agreements --accept-source-agreements",
                 pkg.id);
 
-            // Append custom install location if specified
+            // Append custom install location if specified.
+            // Each package gets its own subfolder under the base path.
+            std::string effectiveLocation;
             if (!installLocation.empty()) {
-                cmdLine += std::format(" --location \"{}\"", installLocation);
+                effectiveLocation = lazyenv::makePackageInstallLocation(
+                    installLocation, pkg.displayName);
+                cmdLine += std::format(" --location \"{}\"", effectiveLocation);
             }
 
             {
@@ -705,8 +713,12 @@ std::string handleWebMessage(const std::string& message) {
             std::string statusStr;
             if (exitCode == 0) {
                 statusStr = "success";
-                if (!installLocation.empty())
-                    lazyenv::Installer::addToUserPath(installLocation);
+                if (pkg.addToPath) {
+                    if (!effectiveLocation.empty())
+                        lazyenv::Installer::addToUserPath(effectiveLocation);
+                    else if (!pkg.defaultPath.empty())
+                        lazyenv::Installer::addToUserPath(pkg.defaultPath);
+                }
             } else if (fullOutput.find("already installed") != std::string::npos ||
                        fullOutput.find("No available upgrade") != std::string::npos) {
                 statusStr = "skipped";

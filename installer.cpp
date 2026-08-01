@@ -80,9 +80,13 @@ InstallResult Installer::installPackage(const PackageInfo& pkg,
         "--accept-package-agreements --accept-source-agreements",
         pkg.id);
 
-    // Append custom install location if specified
+    // Append custom install location if specified.
+    // Each package gets its own subfolder under the user-provided base path.
+    std::string effectiveLocation;
     if (!installLocation.empty()) {
-        cmd += std::format(" --location \"{}\"", installLocation);
+        effectiveLocation = makePackageInstallLocation(installLocation,
+                                                       pkg.displayName);
+        cmd += std::format(" --location \"{}\"", effectiveLocation);
     }
 
     result.exitCode = runCommand(cmd, result.output, 600000); // 10 min timeout
@@ -91,11 +95,11 @@ InstallResult Installer::installPackage(const PackageInfo& pkg,
         result.status = InstallStatus::Success;
 
         // Add to PATH if requested.
-        // When a custom installLocation is provided, use it as the PATH entry
-        // (winget --location may not exactly match the package's defaultPath).
+        // When a custom installLocation is provided, use the package-specific
+        // subfolder as the PATH entry (executables live inside that folder).
         if (pkg.addToPath) {
-            if (!installLocation.empty()) {
-                addToUserPath(installLocation);
+            if (!effectiveLocation.empty()) {
+                addToUserPath(effectiveLocation);
             } else if (!pkg.defaultPath.empty()) {
                 addToUserPath(pkg.defaultPath);
             }
@@ -209,6 +213,38 @@ bool Installer::isCommandAvailable(const std::string& command) {
     std::string cmd = "where " + command;
     int rc = runCommand(cmd, output, 5000);
     return rc == 0 && !output.empty();
+}
+
+// ---------------------------------------------------------------------------
+// Install location resolution
+// ---------------------------------------------------------------------------
+std::string makePackageInstallLocation(const std::string& baseLocation,
+                                       const std::string& packageDisplayName) {
+    if (baseLocation.empty())
+        return "";
+
+    // Sanitize display name for use as a Windows directory name.
+    std::string folder = packageDisplayName.empty() ? "package" : packageDisplayName;
+    for (auto& c : folder) {
+        if (c == '\\' || c == '/' || c == ':' || c == '*' ||
+            c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+            c = '_';
+        }
+    }
+    // Windows forbids trailing spaces and periods in directory names.
+    while (!folder.empty() && (folder.back() == ' ' || folder.back() == '.'))
+        folder.pop_back();
+    if (folder.empty())
+        folder = "package";
+
+    // Normalize base: remove trailing path separators.
+    std::string normalized = baseLocation;
+    while (!normalized.empty() &&
+           (normalized.back() == '\\' || normalized.back() == '/')) {
+        normalized.pop_back();
+    }
+
+    return normalized + "\\" + folder;
 }
 
 // ---------------------------------------------------------------------------
