@@ -1360,7 +1360,7 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
 
-    case WM_REAPPLY_MAXIMIZE: {
+    case lazyenv::WM_REAPPLY_MAXIMIZE: {
         // Deferred re-apply after restore from minimized.
         // Explicit SetWindowPos to rcWork ensures correctness regardless
         // of what Windows/DWM did during the restore sequence.
