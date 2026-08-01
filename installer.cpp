@@ -276,21 +276,16 @@ bool launchProcess(const std::string& cmdLine, HANDLE hWritePipe,
     si.hStdError  = hWritePipe;
     si.wShowWindow = SW_HIDE;
 
-    // Escape double quotes so cmd /c preserves them.
-    // Without this, paths like "E:\Program Files\devltools\..." lose quotes
-    // when passed through cmd.exe, causing winget to see E:\Program as the path.
-    std::string escapedCmdLine;
-    for (size_t i = 0; i < cmdLine.size(); ++i) {
-        if (cmdLine[i] == '"') escapedCmdLine += '\\';
-        escapedCmdLine += cmdLine[i];
-    }
-    std::string fullCmd = "cmd /c \"" + escapedCmdLine + "\"";
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, fullCmd.c_str(),
-                                   static_cast<int>(fullCmd.size()), nullptr, 0);
+    // Launch the command directly without cmd /c wrapper.
+    // cmd.exe strips quotes from arguments when launching child processes,
+    // which breaks paths containing spaces (e.g. --location "E:\Program Files").
+    // winget and where are standalone executables; CreateProcessW searches PATH.
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, cmdLine.c_str(),
+                                   static_cast<int>(cmdLine.size()), nullptr, 0);
     if (wlen <= 0) return false;
     std::wstring wcmd(wlen, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, fullCmd.c_str(),
-                        static_cast<int>(fullCmd.size()), wcmd.data(), wlen);
+    MultiByteToWideChar(CP_UTF8, 0, cmdLine.c_str(),
+                        static_cast<int>(cmdLine.size()), wcmd.data(), wlen);
 
     return CreateProcessW(
         nullptr, wcmd.data(),
