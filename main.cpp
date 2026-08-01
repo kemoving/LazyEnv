@@ -1282,54 +1282,26 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_SIZE: {
-        // --- Critical: NEVER call resize() when minimized ---
+        // --- NEVER call resize() when minimized ---
         // When minimized, GetClientRect returns a tiny rect (~160x28),
         // and put_Bounds with that rect collapses the WebView2 renderer.
-        // The HTML layout recalculates for the tiny viewport, which can
-        // corrupt internal rendering state.  On restore the WebView2 may
-        // then fail to fully recover, leaving the bottom clipped.
         if (wParam == SIZE_MINIMIZED) {
             return 0;
         }
 
-        // --- Reposition before resize ---
-        // When restoring from minimized, Windows may pick a wrong default
-        // position for WS_POPUP windows (DWMWA_TRANSITIONS_FORCEDISABLED
-        // disables the DWM animation that would normally correct this).
-        // We reposition BEFORE resize() so that GetClientRect inside
-        // resize() already sees the correct final dimensions.
+        // --- Restore from minimized ---
+        // ShowWindow(SW_MINIMIZE) / taskbar-restore uses Windows' native
+        // position tracking, so the window is already in the correct place
+        // when SIZE_RESTORED fires.  We simply clear the saved rect flag
+        // — no manual SetWindowPos needed.
         //
-        // g_preMinimizeRect is cleared immediately to prevent re-entry:
-        // SetWindowPos (on the maximized path) may send another WM_SIZE,
-        // and clearing the rect ensures the nested handler won't try to
-        // reposition again, avoiding infinite recursion.
+        // For maximize↔normal transitions, windowMaximize() uses its own
+        // SetWindowPos which will fire a separate WM_SIZE that is handled
+        // normally below.
         if (wParam == SIZE_RESTORED && !IsRectEmpty(&g_preMinimizeRect)) {
-            RECT saved = g_preMinimizeRect;
-            SetRectEmpty(&g_preMinimizeRect);  // one-shot: clear BEFORE SetWindowPos
-            if (g_isMaximized) {
-                HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-                MONITORINFO mi{};
-                mi.cbSize = sizeof(mi);
-                if (GetMonitorInfoW(mon, &mi)) {
-                    SetWindowPos(hwnd, nullptr,
-                                 mi.rcWork.left, mi.rcWork.top,
-                                 mi.rcWork.right  - mi.rcWork.left,
-                                 mi.rcWork.bottom - mi.rcWork.top,
-                                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
-                    // Belts-and-suspenders for pre-Win10-1803 (DWMWA_TRANSITIONS_FORCEDISABLED ignored)
-                    PostMessageW(hwnd, lazyenv::WM_REAPPLY_MAXIMIZE, 0, 0);
-                }
-            } else {
-                SetWindowPos(hwnd, nullptr,
-                             saved.left, saved.top,
-                             saved.right  - saved.left,
-                             saved.bottom - saved.top,
-                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
-            }
+            SetRectEmpty(&g_preMinimizeRect);
         }
 
-        // Now resize WebView2 — GetClientRect already reflects the correct
-        // dimensions after the reposition above.
         g_webview.resize();
 
         if (g_webview.getController()) {
@@ -1405,28 +1377,6 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case lazyenv::WM_WEBVIEW_DRAG_START: {
         ReleaseCapture();
         SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
-        return 0;
-    }
-
-    case lazyenv::WM_REAPPLY_MAXIMIZE: {
-        // Deferred re-apply after restore from minimized.
-        // DwmFlush waits for the compositor to finish any in-flight
-        // animation frames before we reposition.  Combined with
-        // DWMWA_TRANSITIONS_FORCEDISABLED, this is a belt-and-suspenders
-        // guarantee that the window ends up exactly at rcWork.
-        if (g_isMaximized) {
-            DwmFlush();
-            HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-            MONITORINFO mi{};
-            mi.cbSize = sizeof(mi);
-            if (GetMonitorInfoW(mon, &mi)) {
-                SetWindowPos(hwnd, nullptr,
-                             mi.rcWork.left, mi.rcWork.top,
-                             mi.rcWork.right  - mi.rcWork.left,
-                             mi.rcWork.bottom - mi.rcWork.top,
-                             SWP_NOZORDER | SWP_NOACTIVATE);
-            }
-        }
         return 0;
     }
 
