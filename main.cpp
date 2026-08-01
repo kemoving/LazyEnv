@@ -58,7 +58,8 @@ static lazyenv::Installer       g_installer;
 static lazyenv::RollbackManager g_rollback;
 // g_msgMutex is no longer needed; postMessage is now thread-safe via message queue
 static HWND                     g_mainWindow = nullptr;
-static bool                     g_isMaximized = false;
+static bool                     g_isMaximized  = false;
+static bool                     g_wasMinimized = false;
 static RECT                     g_normalRect = {};   // saved before "fake maximize"
 
 // ---------------------------------------------------------------------------
@@ -1273,6 +1274,17 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_SIZE: {
+        if (wParam == SIZE_MINIMIZED) {
+            g_wasMinimized = true;
+        } else if (wParam == SIZE_RESTORED && g_wasMinimized) {
+            g_wasMinimized = false;
+            // After restoring from minimized, re-apply fake-maximize position
+            // so the bottom of the window isn't hidden behind the taskbar.
+            // Deferred via PostMessage to let the current restore sequence finish.
+            if (g_isMaximized) {
+                PostMessageW(hwnd, lazyenv::WM_REAPPLY_MAXIMIZE, 0, 0);
+            }
+        }
         g_webview.resize();
         if (g_webview.getController()) {
             int cw = LOWORD(lParam);  // client area width
@@ -1348,22 +1360,20 @@ static LRESULT WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
 
-    case WM_WINDOWPOSCHANGING: {
-        // When fake-maximized, force the window rect to stay within the
-        // monitor work area. This prevents the taskbar-restore animation
-        // (or DWM) from shifting the rect and making content disappear
-        // behind the taskbar.
-        auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
-        if (g_isMaximized && !(wp->flags & SWP_NOSIZE)) {
+    case WM_REAPPLY_MAXIMIZE: {
+        // Deferred re-apply after restore from minimized.
+        // Explicit SetWindowPos to rcWork ensures correctness regardless
+        // of what Windows/DWM did during the restore sequence.
+        if (g_isMaximized) {
             HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi{};
             mi.cbSize = sizeof(mi);
             if (GetMonitorInfoW(mon, &mi)) {
-                wp->x  = mi.rcWork.left;
-                wp->y  = mi.rcWork.top;
-                wp->cx = mi.rcWork.right  - mi.rcWork.left;
-                wp->cy = mi.rcWork.bottom - mi.rcWork.top;
-                wp->flags &= ~SWP_NOMOVE;
+                SetWindowPos(hwnd, nullptr,
+                             mi.rcWork.left, mi.rcWork.top,
+                             mi.rcWork.right  - mi.rcWork.left,
+                             mi.rcWork.bottom - mi.rcWork.top,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
             }
         }
         return 0;

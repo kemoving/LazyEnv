@@ -36,8 +36,9 @@
 namespace lazyenv {
 
 // Custom window messages for cross-thread communication
-constexpr UINT WM_WEBVIEW_POST_MESSAGE = WM_APP + 1;
-constexpr UINT WM_WEBVIEW_DRAG_START   = WM_APP + 2;
+constexpr UINT WM_WEBVIEW_POST_MESSAGE  = WM_APP + 1;
+constexpr UINT WM_WEBVIEW_DRAG_START    = WM_APP + 2;
+constexpr UINT WM_REAPPLY_MAXIMIZE      = WM_APP + 3;  // deferred re-align after minimize→restore
 
 // Message handler: receives JSON string from web, returns JSON response.
 using MessageHandler = std::function<std::string(const std::string& message)>;
