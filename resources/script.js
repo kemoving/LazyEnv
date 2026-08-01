@@ -37,7 +37,6 @@
     var catalog = [];
     var selectedPackages = new Set();
     var installResults = new Map();
-    var installLogs = new Map();
     var preInstallSnapshotId = "";
     var detectedEnvironments = [];
     var manualEnvironments = [];
@@ -171,9 +170,19 @@
             case "folderSelected":
                 if (d.path) {
                     var flInput = document.getElementById("txtInstallLocation");
-                    if (flInput) { flInput.value = d.path; }
-                    currentInstallLocation = d.path;
-                    saveInstallLocation(d.path);
+                    // Reject paths with spaces: some installers tokenize --location by space
+                    if (/\s/.test(d.path)) {
+                        showToast(t("packages.noSpacesInPath"), "error");
+                        if (flInput) { flInput.value = ""; }
+                        currentInstallLocation = "";
+                        saveInstallLocation("");
+                        updateLocationTooltip("");
+                    } else {
+                        if (flInput) { flInput.value = d.path; }
+                        currentInstallLocation = d.path;
+                        saveInstallLocation(d.path);
+                        updateLocationTooltip(d.path);
+                    }
                 }
                 break;
 
@@ -221,14 +230,6 @@
                     installedPackages.add(d.packageId);
                     persistInstalledPackages();
                 }
-                break;
-
-            case "installLog":
-                if (!installLogs.has(d.packageId)) installLogs.set(d.packageId, []);
-                var lines = installLogs.get(d.packageId);
-                lines.push(d.line);
-                if (lines.length > 200) lines.splice(0, lines.length - 200);
-                updateLogPanel(d.packageId);
                 break;
 
             case "installComplete":
@@ -402,7 +403,12 @@
             setTimeout(function () {
                 var path = prompt("Select install location:", currentInstallLocation || "D:\\Tools");
                 if (path && path.trim()) {
-                    handleNative({ action: "folderSelected", path: path.trim() });
+                    path = path.trim();
+                    if (/\s/.test(path)) {
+                        showToast(t("packages.noSpacesInPath"), "error");
+                    } else {
+                        handleNative({ action: "folderSelected", path: path });
+                    }
                 }
             }, 100);
         }
@@ -1236,7 +1242,6 @@
     // -----------------------------------------------------------------------
     function startInstall() {
         installResults.clear();
-        installLogs.clear();
 
         // Read and validate custom install location (from titlebar)
         var locInput = document.getElementById("txtInstallLocation");
@@ -1266,7 +1271,6 @@
                 toInstall.push(id);
                 installResults.set(id, { status: "pending", message: t("install.waiting"), command: "", output: "" });
             }
-            installLogs.set(id, []);
         });
 
         installTotal = toInstall.length;
@@ -1328,26 +1332,17 @@
             }
             html += '</div>';
 
-            // Command + log
+            // Command + log output
             if (r.command) {
                 var cmdEscaped = esc(r.command);
                 html += '<div class="install-item__cmd-wrap"><div class="install-item__cmd" title="' + cmdEscaped + '">' + cmdEscaped + '</div></div>';
             }
 
-            var logLines = installLogs.get(id) || [];
-            if (logLines.length > 0 || r.status === "running") {
-                html += '<div class="install-item__log" id="log-' + esc(id) + '">';
-                logLines.forEach(function (line) {
-                    html += '<div class="log-line">' + esc(line) + '</div>';
-                });
-                if (r.status === "running" && logLines.length === 0) {
-                    html += '<div class="log-line log-line--dim">' + esc(t("install.waitingOutput")) + '</div>';
-                }
-                html += '</div>';
-            }
-
-            if (r.status === "failed" && r.output) {
-                html += '<div class="install-item__error">' + esc(r.output) + '</div>';
+            var outText = r.output || r.message || "";
+            if (outText) {
+                html += '<div class="install-item__log" id="log-' + esc(id) + '"><div class="log-line">' + esc(outText) + '</div></div>';
+            } else if (r.status === "running") {
+                html += '<div class="install-item__log" id="log-' + esc(id) + '"><div class="log-line log-line--dim">' + esc(t("install.waitingOutput")) + '</div></div>';
             }
 
             html += '</div>';
@@ -1360,7 +1355,6 @@
             btn.addEventListener("click", function () {
                 var pkgId = btn.dataset.id;
                 installResults.set(pkgId, { status: "pending", message: t("install.retrying"), command: "", output: "" });
-                installLogs.set(pkgId, []);
                 renderInstallList();
                 sendNative({ action: "retryInstall", packageId: pkgId, installLocation: currentInstallLocation });
             });
@@ -1374,25 +1368,6 @@
             });
         });
 
-        // Auto-scroll logs
-        installResults.forEach(function (r, id) {
-            if (r.status === "running") {
-                var logEl = document.getElementById("log-" + id);
-                if (logEl) logEl.scrollTop = logEl.scrollHeight;
-            }
-        });
-    }
-
-    function updateLogPanel(packageId) {
-        var logEl = document.getElementById("log-" + packageId);
-        if (!logEl) { renderInstallList(); return; }
-        var lines = installLogs.get(packageId) || [];
-        var html = "";
-        lines.forEach(function (line) {
-            html += '<div class="log-line">' + esc(line) + '</div>';
-        });
-        logEl.innerHTML = html;
-        logEl.scrollTop = logEl.scrollHeight;
     }
 
     function updateProgressBar() {

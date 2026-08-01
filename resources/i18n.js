@@ -150,6 +150,7 @@
             "packages.installLocationPlaceholder": "e.g. D:\\Tools (each package gets its own subfolder)",
             "packages.locationHint":            "Tip: Use a non-system drive (e.g. D:\\) to keep C: clean. Each package is installed into its own subfolder.",
             "packages.noDriveSpaceAfterColon":  "Please include a drive letter and path (e.g. D:\\MyApps).",
+            "packages.noSpacesInPath":          "Install path must not contain spaces. Some installers treat spaces as argument separators, which may truncate the path (e.g. \"E:\\Program\" instead of \"E:\\Program Files\").",
 
             // Install
             "install.title":                    "Installation",
@@ -362,6 +363,7 @@
             "packages.installLocationPlaceholder": "\u4f8b\u5982 D:\\Tools\uff08\u6bcf\u4e2a\u5305\u4f1a\u81ea\u52a8\u521b\u5efa\u72ec\u7acb\u5b50\u76ee\u5f55\uff09",
             "packages.locationHint":            "\u63d0\u793a\uff1a\u4f7f\u7528\u975e\u7cfb\u7edf\u76d8\uff08\u5982 D:\uff09\u53ef\u4fdd\u6301 C: \u5e72\u51c0\u3002\u6bcf\u4e2a\u5305\u4f1a\u5b89\u88c5\u5230\u72ec\u7acb\u7684\u5b50\u76ee\u5f55\u4e2d\u3002",
             "packages.noDriveSpaceAfterColon":  "\u8bf7\u8f93\u5165\u76d8\u7b26\u548c\u8def\u5f84\uff08\u4f8b\u5982 D:\\MyApps\uff09\u3002",
+            "packages.noSpacesInPath":          "\u5b89\u88c5\u8def\u5f84\u4e0d\u80fd\u5305\u542b\u7a7a\u683c\u3002\u90e8\u5206\u5b89\u88c5\u5668\u4f1a\u5c06\u7a7a\u683c\u89c6\u4e3a\u53c2\u6570\u5206\u9694\u7b26\uff0c\u53ef\u80fd\u5bfc\u81f4\u8def\u5f84\u622a\u65ad\uff08\u5982\u53ea\u53d6 \"E:\\Program\" \u800c\u975e \"E:\\Program Files\"\uff09\u3002",
 
             // Install
             "install.title":                    "\u5b89\u88c5",
