@@ -225,9 +225,7 @@ std::string detectInstalledEnvironments() {
         if (!chk.versionFlag.empty()) {
             cmd += " " + chk.versionFlag;
         }
-        // Note: 2>&1 is NOT needed here because launchProcess() already
-        // pipes both stdout and stderr to the same HANDLE (see installer.cpp).
-        // Adding 2>&1 without a cmd /c wrapper breaks .cmd/.bat launchers.
+        cmd += " 2>&1";
 
         int rc = lazyenv::Installer::runCommand(cmd, output, 5000);
 
