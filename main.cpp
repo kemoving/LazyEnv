@@ -492,6 +492,55 @@ std::string handleWebMessage(const std::string& message) {
         return "{\"action\":\"uninstallStarted\"}";
     }
 
+    // ------ Open install directory ------
+    if (action == "openInstallDir") {
+        std::string cmdName = extractJsonValue(message, "command");
+        launchThreadSafe([cmdName]() {
+            try {
+                std::string output;
+                std::string whereCmd = "cmd /c where " + cmdName + " 2>nul";
+                int rc = lazyenv::Installer::runCommand(whereCmd, output, 10000);
+                std::string dirPath;
+                bool success = false;
+
+                if (rc == 0 && !output.empty()) {
+                    // Take the first line from "where" output
+                    auto nl = output.find('\n');
+                    std::string exePath = output.substr(0, nl == std::string::npos ? output.size() : nl);
+                    // Trim whitespace
+                    while (!exePath.empty() && (exePath.back() == '\r' || exePath.back() == '\n' || exePath.back() == ' '))
+                        exePath.pop_back();
+
+                    // Extract directory from full path
+                    auto slash = exePath.find_last_of("\\/");
+                    if (slash != std::string::npos) {
+                        dirPath = exePath.substr(0, slash);
+                        // Open Explorer at that directory
+                        HINSTANCE hinst = ShellExecuteA(nullptr, "open", dirPath.c_str(),
+                                                         nullptr, nullptr, SW_SHOWNORMAL);
+                        success = ((INT_PTR)hinst > 32);
+                    }
+                }
+
+                std::string respMsg = std::format(
+                    "{{\"action\":\"openInstallDirResult\",\"command\":\"{}\",\"success\":{},\"dir\":\"{}\"}}",
+                    jsonEscape(cmdName), success ? "true" : "false", jsonEscape(dirPath));
+                g_webview.postMessage(respMsg);
+            } catch (...) {
+                std::string respMsg = std::format(
+                    "{{\"action\":\"openInstallDirResult\",\"command\":\"{}\",\"success\":false,\"error\":true}}",
+                    jsonEscape(cmdName));
+                g_webview.postMessage(respMsg);
+            }
+        }, [cmdName]() {
+            std::string respMsg = std::format(
+                "{{\"action\":\"openInstallDirResult\",\"command\":\"{}\",\"success\":false,\"error\":\"Fatal SEH exception\"}}",
+                jsonEscape(cmdName));
+            g_webview.postMessage(respMsg);
+        });
+        return "{\"action\":\"openInstallDirStarted\"}";
+    }
+
     // ------ Get catalog ------
     if (action == "getCatalog") {
         auto catalog = lazyenv::getDefaultCatalog();

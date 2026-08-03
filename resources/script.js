@@ -762,6 +762,7 @@
                     '<div class="card-row__subtitle">' + esc(e.version) + '</div>' +
                     '</div>' +
                     '<div class="card-row__actions">' +
+                    '<button class="btn btn--sm btn-open-dir" title="' + esc(t("env.btnOpenDir")) + '">' + esc(t("env.btnOpenDir")) + '</button>' +
                     '<button class="btn btn--sm btn-uninstall">' + esc(t("env.btnUninstall")) + '</button>' +
                     '</div></div>';
             });
@@ -783,6 +784,16 @@
                         { text: t("env.btnUninstall"), cls: "btn--danger", action: function () { sendNative({ action: "uninstallPackage", command: name }); } }
                     ]
                 );
+            });
+        });
+
+        container.querySelectorAll(".btn-open-dir").forEach(function (btn) {
+            btn.addEventListener("click", function (ev) {
+                ev.stopPropagation();
+                var row = btn.closest(".card-row");
+                var cmd = row.getAttribute("data-cmd");
+                var name = row.querySelector(".card-row__title").textContent;
+                sendNative({ action: "openInstallDir", command: cmd || name });
             });
         });
     }
