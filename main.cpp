@@ -225,9 +225,12 @@ std::string detectInstalledEnvironments() {
         if (!chk.versionFlag.empty()) {
             cmd += " " + chk.versionFlag;
         }
-        cmd += " 2>&1";
+        // Wrap with "cmd /c" so the shell resolves .cmd/.bat files (npm, yarn, etc.)
+        // and provides a proper PATH search consistent with the user's terminal.
+        // No need for 2>&1 — launchProcess() pipes both stdout and stderr together.
+        std::string wrappedCmd = "cmd /c " + cmd;
 
-        int rc = lazyenv::Installer::runCommand(cmd, output, 5000);
+        int rc = lazyenv::Installer::runCommand(wrappedCmd, output, 5000);
 
         // Extract first line of output as version
         std::string version;
@@ -238,6 +241,10 @@ std::string detectInstalledEnvironments() {
                 version.pop_back();
             if (version.size() > 120) version = version.substr(0, 120);
         }
+
+        DBG_LOG("detectEnv: cmd=[" << cmd << "] rc=" << rc
+                << " outputLen=" << output.size()
+                << " version=[" << version << "]");
 
         if (rc == 0 && !version.empty()) {
             if (!first) os << ",";
@@ -261,10 +268,11 @@ std::string probeCommand(const std::string& command, const std::string& category
     for (auto& flag : flags) {
         std::string cmd = command;
         if (!flag.empty()) cmd += " " + flag;
-        cmd += " 2>&1";
+        // Wrap with "cmd /c" for consistent PATH resolution (handles .cmd/.bat files)
+        std::string wrappedCmd = "cmd /c " + cmd;
 
         std::string output;
-        int rc = lazyenv::Installer::runCommand(cmd, output, 5000);
+        int rc = lazyenv::Installer::runCommand(wrappedCmd, output, 5000);
 
         if (rc == 0 && !output.empty()) {
             auto nl = output.find('\n');
